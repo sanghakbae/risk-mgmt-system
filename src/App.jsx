@@ -1,7 +1,6 @@
 import React, { useMemo, useState, useEffect } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
-import AssetsPanel from "./components/AssetsPanel";
 import ChecklistPanel from "./components/ChecklistPanel";
 import StatusWritePanel from "./components/StatusWritePanel";
 import VulnIdentifyPanel from "./components/VulnIdentifyPanel";
@@ -73,7 +72,11 @@ function applyResidualByTreatment(baseImpact, baseLikelihood, treatment) {
 }
 
 export default function App() {
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    // 모바일/좁은 화면에서는 기본으로 사이드바를 접어 콘텐츠 영역을 우선합니다.
+    if (typeof window === "undefined") return false;
+    return window.innerWidth < 768;
+  });
   const [activeStep, setActiveStep] = useState("status");
   const [checklistReloadKey, setChecklistReloadKey] = useState(0);
 
@@ -318,15 +321,16 @@ export default function App() {
         <div className="flex items-start justify-between gap-4">
           <div>
             <div className="text-lg font-bold text-slate-900">체크리스트 기반 위험평가 시스템</div>
+            <div className="text-sm text-slate-500">Checklist 시트가 모든 메뉴의 단일 기준(SSOT)입니다.</div>
           </div>
           {headerRight}
         </div>
 
-        <div className="mt-5 flex flex-col md:flex-row gap-4">
+        <div className="mt-5 flex gap-4">
           {/* Left Sidebar */}
-          <div className={`md:${sidebarCollapsed ? "w-0" : "w-[190px]"} w-full transition-all overflow-hidden shrink-0`}>
+          <div className={`${sidebarCollapsed ? "w-0" : "w-[192px]"} transition-all overflow-hidden shrink-0`}>
             <div className="space-y-4">
-              <Card title="프로세스 단계" right={<Badge>Matrix {matrix}</Badge>}>
+              <Card title="프로세스 단계" desc="왼쪽 단계는 그대로 따라가도록 설계" right={<Badge>Matrix {matrix}</Badge>}>
                 <div className="space-y-2">
                   {STEPS.map((s, idx) => {
                     const active = s.key === activeStep;
@@ -383,7 +387,7 @@ export default function App() {
               <Card title="설정" desc="허용기준/매트릭스">
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <div className="text-xs font-semibold text-slate-700">Matrix</div>
+                    <div className="text-xs font-semibold text-slate-700">평가 매트릭스</div>
                     <div className="mt-1">
                       <Select value={matrix} onChange={setMatrix} options={["3x3", "5x5"].map((x) => ({ value: x, label: x }))} />
                     </div>
@@ -407,11 +411,9 @@ export default function App() {
           </div>
 
           {/* Right Body */}
-          <div className="flex-1 min-w-0">
-          const stepIndex = STEPS.findIndex(s => s.key === activeStep);
-              <Card title={`${stepIndex + 1}. ${panelTitle}`} desc={panelDesc} right={<Badge>Work-in-Progress</Badge>}>
-              {activeStep === "assets" ? <AssetsPanel assets={assets} setAssets={setAssets} /> : null}
-
+          <div className="flex-1 w-full">
+            <Card title={`${panelTitle}`} desc={panelDesc} right={<Badge>Work-in-Progress</Badge>}>
+              
               {activeStep === "checklist" ? (
                 <ChecklistPanel
                   checklistItems={checklistItems}
