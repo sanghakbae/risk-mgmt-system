@@ -7,15 +7,9 @@ import Button from "../ui/Button";
  * - 스프레드시트에서 로드된 checklistItems를 표로 보여줌
  * - CSV Export 지원
  * - 검색(버튼으로 적용) + 페이지네이션(20개)
- * - ✅ 상단 대시보드: 통제/점검/취약/위험 지표 요약
  *
  * checklistItems 예상 컬럼(일부만 써도 OK):
  * - type, area, domain, code, itemCode
- * - status                : 통제 이행 점검에서 작성한 현황(텍스트)
- * - result                : 취약 도출 결과(양호/취약)
- * - impact                : 위험 평가(영향도)
- * - likelihood            : 위험 평가(가능성)
- * - treatment_*           : 위험 처리(선택/계획 등)
  */
 export default function ChecklistPanel({ checklistItems = [] }) {
   const PAGE_SIZE = 20;
@@ -26,46 +20,6 @@ export default function ChecklistPanel({ checklistItems = [] }) {
   const [query, setQuery] = useState("");
   const [appliedQuery, setAppliedQuery] = useState("");
   const [page, setPage] = useState(1);
-
-  // ----------------------------
-  // ✅ Dashboard metrics
-  // ----------------------------
-  const metrics = useMemo(() => {
-    const totalControls = checklistItems.length;
-
-    // 통제 이행 점검 진행률: status가 저장된 항목 수 / 전체
-    const statusDone = checklistItems.filter((x) => String(x.status ?? "").trim().length > 0).length;
-
-    // 취약 도출 진행률: result(양호/취약)가 저장된 항목 수 / 전체
-    const vulnDone = checklistItems.filter((x) => {
-      const r = String(x.result ?? x.vulnResult ?? "").trim();
-      return r === "양호" || r === "취약";
-    }).length;
-
-    // 위험(평가 대상) 개수: result=취약 인 항목 수
-    const riskTotal = checklistItems.filter((x) => String(x.result ?? x.vulnResult ?? "").trim() === "취약").length;
-
-    // 위험 평가(영향도 지정) 개수: impact 값이 저장된 항목 수
-    // (보통 취약 항목에 대해서만 영향도를 입력하므로, 화면에는 "impact 지정 N / 취약 M" 형태로 보여줌)
-    const impactAssigned = checklistItems.filter((x) => {
-      const i = String(x.impact ?? "").trim();
-      if (!i) return false;
-      return true;
-    }).length;
-
-    // percent helper
-    const pct = (done, total) => (total > 0 ? Math.round((done / total) * 100) : 0);
-
-    return {
-      totalControls,
-      statusDone,
-      statusPct: pct(statusDone, totalControls),
-      vulnDone,
-      vulnPct: pct(vulnDone, totalControls),
-      impactAssigned,
-      riskTotal,
-    };
-  }, [checklistItems]);
 
   // ----------------------------
   // Table columns
@@ -93,18 +47,22 @@ export default function ChecklistPanel({ checklistItems = [] }) {
     const headers = cols.map((c) => [c.key, c.label]);
     const lines = [];
     lines.push(headers.map((h) => csvEscape(h[1])).join(","));
+
     for (const x of checklistItems) {
       lines.push(headers.map(([k]) => csvEscape(x[k] ?? "")).join(","));
     }
+
     const csv = "\ufeff" + lines.join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
+
     const link = document.createElement("a");
     link.href = url;
     link.download = "controls.csv";
     document.body.appendChild(link);
     link.click();
     link.remove();
+
     URL.revokeObjectURL(url);
   }
 
@@ -138,49 +96,20 @@ export default function ChecklistPanel({ checklistItems = [] }) {
     setPage(1);
   }
 
-  // ----------------------------
-  // UI helpers
-  // ----------------------------
-  function StatCard({ title, value, sub, tone = "slate" }) {
-    const toneCls =
-      tone === "blue"
-        ? "border-blue-200 bg-blue-50 text-blue-900"
-        : tone === "red"
-        ? "border-red-200 bg-red-50 text-red-900"
-        : "border-slate-200 bg-white text-slate-900";
-
-    return (
-      <div className={`rounded-2xl border p-4 ${toneCls}`}>
-        <div className="text-xs font-semibold text-slate-600">{title}</div>
-        <div className="mt-1 text-2xl font-bold">{value}</div>
-        {sub ? <div className="mt-1 text-xs text-slate-600">{sub}</div> : null}
-      </div>
-    );
-  }
-
-  function ProgressCard({ title, done, total, pct }) {
-    return (
-      <div className="rounded-2xl border border-slate-200 bg-white p-4">
-        <div className="flex items-center justify-between gap-3">
-          <div className="text-xs font-semibold text-slate-700">{title}</div>
-          <div className="text-xs text-slate-500">
-            {done}/{total} ({pct}%)
-          </div>
-        </div>
-        <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-slate-100">
-          <div className="h-full bg-slate-900" style={{ width: `${pct}%` }} />
-        </div>
-      </div>
-    );
-  }
-
   return (
+    <div className="space-y-4">
       {/* Top bar */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div className="text-sm text-slate-600">통제 항목 목록(검색/페이지) + CSV Export</div>
+        <div className="text-sm text-slate-600">
+          통제 항목 목록(검색/페이지) + CSV Export
+        </div>
 
         <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={exportCsv} iconLeft={<Download className="w-4 h-4" />}>
+          <Button
+            variant="outline"
+            onClick={exportCsv}
+            iconLeft={<Download className="w-4 h-4" />}
+          >
             CSV Export
           </Button>
         </div>
@@ -244,7 +173,10 @@ export default function ChecklistPanel({ checklistItems = [] }) {
 
             {paged.length === 0 ? (
               <tr>
-                <td colSpan={cols.length} className="px-3 py-10 text-center text-sm text-slate-500">
+                <td
+                  colSpan={cols.length}
+                  className="px-3 py-10 text-center text-sm text-slate-500"
+                >
                   표시할 항목이 없습니다.
                 </td>
               </tr>
@@ -259,6 +191,7 @@ export default function ChecklistPanel({ checklistItems = [] }) {
           {Array.from({ length: totalPages }).map((_, i) => {
             const n = i + 1;
             const active = n === pageSafe;
+
             return (
               <button
                 key={n}
@@ -266,7 +199,9 @@ export default function ChecklistPanel({ checklistItems = [] }) {
                 onClick={() => setPage(n)}
                 className={[
                   "px-3 py-1.5 rounded-xl border text-sm font-semibold",
-                  active ? "bg-slate-900 text-white border-slate-900" : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50",
+                  active
+                    ? "bg-slate-900 text-white border-slate-900"
+                    : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50",
                 ].join(" ")}
               >
                 {n}
