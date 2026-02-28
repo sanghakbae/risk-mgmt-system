@@ -321,6 +321,7 @@ export default function App() {
         <div className="flex items-start justify-between gap-4">
           <div>
             <div className="text-lg font-bold text-slate-900">체크리스트 기반 위험평가 시스템</div>
+          </div>
           {headerRight}
         </div>
 
@@ -328,7 +329,7 @@ export default function App() {
           {/* Left Sidebar */}
           <div className={`${sidebarCollapsed ? "w-0" : "w-full md:w-[210px]"} transition-all overflow-hidden shrink-0`}>
             <div className="space-y-4">
-              <Card title="프로세스">
+              <Card title="프로세스 단계">
                 <div className="space-y-2">
                   {STEPS.map((s, idx) => {
                     const active = s.key === activeStep;
