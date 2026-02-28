@@ -175,31 +175,6 @@ export default function ChecklistPanel({ checklistItems = [] }) {
   }
 
   return (
-    <div className="space-y-4">
-      {/* ✅ Dashboard */}
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-        <StatCard title="통제 항목 관리" value={`${metrics.totalControls}`} sub="통제 항목(전체) 개수" />
-        <ProgressCard
-          title="통제 이행 점검"
-          done={metrics.statusDone}
-          total={metrics.totalControls}
-          pct={metrics.statusPct}
-        />
-        <ProgressCard
-          title="취약 도출"
-          done={metrics.vulnDone}
-          total={metrics.totalControls}
-          pct={metrics.vulnPct}
-        />
-        <StatCard
-          title="위험 평가"
-          value={`${metrics.impactAssigned}`}
-          sub={`영향도(impact) 지정 건수 · 취약 ${metrics.riskTotal}건`}
-          tone="blue"
-        />
-        <StatCard title="위험 처리" value={`${metrics.riskTotal}`} sub="취약(위험) 항목 개수" tone="red" />
-      </div>
-
       {/* Top bar */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="text-sm text-slate-600">통제 항목 목록(검색/페이지) + CSV Export</div>
