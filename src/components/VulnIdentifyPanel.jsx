@@ -1,52 +1,22 @@
 // src/components/VulnIdentifyPanel.jsx
+// 취약 도출(2단계) 화면
 //
-// 목적
-// - "취약 도출" 화면: 통제(질문)별 현황(status)을 근거로 결과(양호/취약)를 확정하고 저장
-// - 결과는 "저장"을 눌렀을 때만 Sheets에 반영되도록(=draft/commit 패턴)
-// - 분야(domain) 구분(섹션 헤더) 제공
-// - 항목(질문)과 현황(status) 영역을 넓게, 나머지(유형/영역/분야/코드/결과/저장)는 폭을 줄이고 가운데 정렬
-// - 현황(status)은 개행을 보존하여 파란색으로 잘 보이게 표시
-// - 결과 컬럼은 폭을 줄이고, 양호=파랑/취약=빨강으로 색상 표시
-// - 진행률은 "전체 통제 개수 대비"로 계산 (분야별이 아닌 전체 기준)
+// 요구사항 정리
+// 1) 진행률: "분야별"이 아니라 "전체 통제 개수 대비" (결과가 저장된 항목 수 / 전체 항목 수)
+// 2) 분야(domain): 상단 셀렉트로 필터링. (전체 선택 시에는 분야 구분(섹션 헤더)도 보여줌)
+// 3) 현황(status): 통제 이행 점검 페이지처럼 "개행이 유지"되어 보이게(whitespace-pre-wrap) + 파란색 강조 박스
+// 4) 결과(양호/취약): 폭 줄이고 가운데 정렬. 취약=빨강, 양호=파랑.
+// 5) 저장: (양호/취약) 선택만으로는 반영되지 않고, "저장"을 눌렀을 때만 시트에 반영 + 저장표시(savedMap) 갱신
+// 6) 항목/현황: 화면에서 가장 중요하니 폭을 크게. (항목과 현황을 거의 동일 폭으로)
 //
-// 주의
-// - updateFields는 StatusWritePanel에서 사용하던 것과 동일한 시그니처를 가정합니다.
-//   updateFields(sheetName, code, { field: value, ... })
-// - 실제 시트 컬럼명이 다르면 RESULT_FIELD 값을 바꿔주세요.
+// NOTE
+// - checklistItems는 상위에서 내려오는 데이터(시트 로드 결과)라고 가정.
+// - updateFields는 code 기준으로 특정 컬럼을 업데이트하는 함수라고 가정.
+// - 시트 컬럼명이 프로젝트마다 다를 수 있어, 안전하게 vulnResult / result 둘 다 써서 업데이트를 시도함.
 
 import React, { useEffect, useMemo, useState } from "react";
+import Select from "../ui/Select";
 import { updateFields } from "../lib/sheetsApi";
-
-// ✅ 시트/필드명은 프로젝트에 맞게 조정하세요.
-const SHEET_NAME = "Checklist";
-// 결과 저장 컬럼(예: result, vuln_result 등)
-const RESULT_FIELD = "result";
-
-function normalizeResult(v) {
-  if (!v) return "";
-  const s = String(v).trim();
-  if (s === "양호" || s.toLowerCase() === "good") return "양호";
-  if (s === "취약" || s.toLowerCase() === "vuln" || s.toLowerCase() === "vulnerable") return "취약";
-  return s; // 기타 값은 그대로
-}
-
-function getSavedResult(item) {
-  // 다양한 데이터 모델을 방어적으로 지원
-  // (기존 코드/시트 설계가 바뀌어도 화면이 깨지지 않게)
-  const candidates = [
-    item?.[RESULT_FIELD],
-    item?.result,
-    item?.vuln_result,
-    item?.vulnResult,
-    item?.finding,
-    item?.assessment,
-  ];
-  for (const v of candidates) {
-    const n = normalizeResult(v);
-    if (n) return n;
-  }
-  return "";
-}
 
 function ProgressBar({ done, total, label }) {
   const pct = total > 0 ? Math.round((done / total) * 100) : 0;
@@ -58,230 +28,315 @@ function ProgressBar({ done, total, label }) {
           {done}/{total} ({pct}%)
         </div>
       </div>
-      <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-slate-100">
+      <div className="mt-3 h-2 w-full rounded-full bg-slate-100 overflow-hidden">
         <div className="h-full bg-slate-900" style={{ width: `${pct}%` }} />
       </div>
     </div>
   );
 }
 
-function ResultPill({ value }) {
-  // 결과 뱃지(폭 줄이고 가운데 정렬 + 색상)
-  if (!value) {
-    return (
-      <span className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-500">
-        미선택
-      </span>
-    );
-  }
-  const isVuln = value === "취약";
-  const cls = isVuln
-    ? "border-red-200 bg-red-50 text-red-700"
-    : "border-blue-200 bg-blue-50 text-blue-700";
-  return <span className={`inline-flex items-center justify-center rounded-full border px-3 py-1 text-xs font-semibold ${cls}`}>{value}</span>;
+function normalizeText(v) {
+  if (v == null) return "";
+  return String(v);
+}
+
+function getItemResult(item) {
+  // 저장된 결과 컬럼명이 repo마다 다를 수 있어 둘 다 허용
+  return normalizeText(item.vulnResult || item.result || "").trim();
+}
+
+function groupByDomain(items) {
+  const map = new Map();
+  items.forEach((it) => {
+    const d = normalizeText(it.domain || "미분류");
+    if (!map.has(d)) map.set(d, []);
+    map.get(d).push(it);
+  });
+  return Array.from(map.entries()).map(([domain, list]) => ({
+    domain,
+    list,
+  }));
 }
 
 export default function VulnIdentifyPanel({ checklistItems = [], onUpdated }) {
-  // draft: code -> { resultDraft }
-  const [draftMap, setDraftMap] = useState({});
-  // save 중 표시(UX)
-  const [savingCode, setSavingCode] = useState(null);
+  // 분야(domain) 필터
+  const [selectedDomain, setSelectedDomain] = useState("");
+
   // 검색
   const [q, setQ] = useState("");
 
-  // 초기 draft 세팅: 서버/시트에 저장된 값을 기준으로 시작
+  // code -> 저장된 결과
+  const [savedMap, setSavedMap] = useState({});
+  // code -> 임시 선택(저장 전)
+  const [draftMap, setDraftMap] = useState({});
+  const [savingCode, setSavingCode] = useState(null);
+
+  // 초기/갱신 시 savedMap 동기화
   useEffect(() => {
-    const next = {};
+    const m = {};
     (checklistItems || []).forEach((it) => {
-      const code = String(it?.code ?? "");
+      const code = normalizeText(it.code);
       if (!code) return;
-      next[code] = { resultDraft: getSavedResult(it) };
+      const r = getItemResult(it);
+      if (r) m[code] = r; // "양호" | "취약"
     });
-    setDraftMap(next);
+    setSavedMap(m);
+    // draft는 사용자가 선택한 값만 유지하고 싶으면 여기서 초기화하지 않는 편이 안전함
   }, [checklistItems]);
 
-  const filtered = useMemo(() => {
-    const text = q.trim().toLowerCase();
-    if (!text) return checklistItems || [];
-    return (checklistItems || []).filter((it) => {
-      const blob = [it?.type, it?.area, it?.domain, it?.code, it?.item, it?.status, getSavedResult(it)]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-      return blob.includes(text);
+  // 도메인 목록
+  const domains = useMemo(() => {
+    const set = new Set();
+    (checklistItems || []).forEach((it) => {
+      const d = normalizeText(it.domain);
+      if (d) set.add(d);
     });
-  }, [checklistItems, q]);
+    return Array.from(set);
+  }, [checklistItems]);
 
-  // ✅ 진행률(전체 통제 기준)
+  // 전체 진행률(필터와 무관하게 전체 기준)
   const progress = useMemo(() => {
     const total = (checklistItems || []).length;
-    const done = (checklistItems || []).filter((it) => {
-      const v = normalizeResult(getSavedResult(it));
-      return v === "양호" || v === "취약";
-    }).length;
-    return { total, done };
-  }, [checklistItems]);
-
-  // ✅ 분야(domain)별 그룹핑 (구분 유지)
-  const groupedByDomain = useMemo(() => {
-    const m = new Map();
-    (filtered || []).forEach((it) => {
-      const key = (it?.domain ?? "미분류").toString().trim() || "미분류";
-      if (!m.has(key)) m.set(key, []);
-      m.get(key).push(it);
+    let done = 0;
+    (checklistItems || []).forEach((it) => {
+      const code = normalizeText(it.code);
+      if (!code) return;
+      const r = savedMap[code] || getItemResult(it);
+      if (r === "양호" || r === "취약") done += 1;
     });
-    return Array.from(m.entries());
-  }, [filtered]);
+    return { done, total };
+  }, [checklistItems, savedMap]);
 
-  function setDraftResult(code, value) {
-    setDraftMap((prev) => ({
-      ...prev,
-      [code]: {
-        ...(prev[code] || {}),
-        resultDraft: value,
-      },
-    }));
+  // 검색/필터 적용된 items
+  const filtered = useMemo(() => {
+    const query = q.trim().toLowerCase();
+    return (checklistItems || []).filter((it) => {
+      const domainOk = selectedDomain ? normalizeText(it.domain) === selectedDomain : true;
+      if (!domainOk) return false;
+
+      if (!query) return true;
+      const hay = [
+        it.type,
+        it.area,
+        it.domain,
+        it.code,
+        it.item,
+        it.status,
+        getItemResult(it),
+      ]
+        .map(normalizeText)
+        .join(" ")
+        .toLowerCase();
+      return hay.includes(query);
+    });
+  }, [checklistItems, selectedDomain, q]);
+
+  // "전체" 선택이면 domain별로 섹션 구분해서 보여줌
+  const sections = useMemo(() => {
+    if (selectedDomain) {
+      return [{ domain: selectedDomain, list: filtered }];
+    }
+    return groupByDomain(filtered);
+  }, [filtered, selectedDomain]);
+
+  function setDraft(code, v) {
+    setDraftMap((prev) => ({ ...prev, [code]: v }));
   }
 
   async function saveResult(item) {
-    const code = String(item?.code ?? "");
+    const code = normalizeText(item.code);
     if (!code) return;
 
-    const draft = draftMap?.[code]?.resultDraft ?? "";
-    const normalized = normalizeResult(draft);
+    const draft = normalizeText(draftMap[code]).trim();
+    if (draft !== "양호" && draft !== "취약") return;
 
-    // "저장"을 눌렀을 때만 반영
+    setSavingCode(code);
     try {
-      setSavingCode(code);
-      await updateFields(SHEET_NAME, code, { [RESULT_FIELD]: normalized });
+      // 시트 컬럼명이 "vulnResult" 또는 "result" 중 무엇이든 대응하도록 둘 다 전달
+      await updateFields([{ code, vulnResult: draft, result: draft }]);
 
-      // 저장 성공 후: 부모가 재조회하도록 콜백 (혹은 optimistic 반영)
-      onUpdated && onUpdated();
+      setSavedMap((prev) => ({ ...prev, [code]: draft }));
+
+      if (typeof onUpdated === "function") onUpdated();
     } finally {
       setSavingCode(null);
     }
   }
 
+  function ResultPill({ label, color, active, onClick }) {
+    const base =
+      "px-3 py-1 rounded-full text-xs font-semibold border transition select-none";
+    const activeCls =
+      color === "red"
+        ? "bg-red-600 border-red-600 text-white"
+        : "bg-blue-600 border-blue-600 text-white";
+    const idleCls =
+      color === "red"
+        ? "bg-white border-red-200 text-red-600 hover:bg-red-50"
+        : "bg-white border-blue-200 text-blue-600 hover:bg-blue-50";
+
+    return (
+      <button type="button" className={`${base} ${active ? activeCls : idleCls}`} onClick={onClick}>
+        {label}
+      </button>
+    );
+  }
+
   return (
-    <div className="space-y-4">
-      {/* 헤더 + 진행률 */}
-      <div className="flex flex-col gap-3">
-        <div className="flex items-end justify-between gap-3">
-          <div>
-            <div className="text-lg font-bold text-slate-900">2. 취약 도출</div>
-            <div className="text-sm text-slate-600">통제 이행 점검의 현황(status)을 근거로 각 항목의 결과(양호/취약)를 확정하여 저장합니다.</div>
-          </div>
-          <div className="w-72">
-            <ProgressBar done={progress.done} total={progress.total} label="취약 도출 진행률 (전체 통제 기준)" />
+    <div className="space-y-6">
+      {/* 상단 헤더 + 진행률 */}
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <div className="text-lg font-bold text-slate-900">2. 취약 도출</div>
+          <div className="text-sm text-slate-600">
+            통제 이행 점검의 현황(status)을 근거로 각 항목의 결과(양호/취약)를 저장합니다.
           </div>
         </div>
-
-        {/* 검색 */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-4">
-          <div className="flex items-center gap-3">
-            <div className="text-sm font-semibold text-slate-900">검색</div>
-            <input
-              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
-              placeholder="유형/영역/분야/코드/항목/현황/결과 검색"
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-            />
-          </div>
+        <div className="w-[320px] max-w-full">
+          <ProgressBar
+            done={progress.done}
+            total={progress.total}
+            label="취약 도출 진행률 (전체 통제 기준)"
+          />
         </div>
       </div>
 
-      {/* 목록: 분야(domain) 구분 */}
+      {/* 필터 영역 */}
+      <div className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-4 md:flex-row md:items-end">
+        <div className="md:w-[280px]">
+          <div className="text-xs font-semibold text-slate-700 mb-1">분야(domain)</div>
+          <Select
+            value={selectedDomain}
+            onChange={(v) => setSelectedDomain(v)}
+            options={[
+              { value: "", label: "전체" },
+              ...domains.map((d) => ({ value: d, label: d })),
+            ]}
+          />
+        </div>
+
+        <div className="flex-1">
+          <div className="text-xs font-semibold text-slate-700 mb-1">검색</div>
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
+            placeholder="유형/영역/분야/코드/항목/현황/결과 검색"
+          />
+        </div>
+      </div>
+
+      {/* 결과 테이블 */}
       <div className="space-y-6">
-        {groupedByDomain.map(([domain, items]) => (
-          <div key={domain} className="rounded-2xl border border-slate-200 bg-white">
-            {/* Domain 헤더 */}
-            <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-              <div className="text-sm font-bold text-slate-900">분야: {domain}</div>
-              <div className="text-xs text-slate-500">{items.length}개 항목</div>
+        {sections.map((sec) => (
+          <div key={sec.domain} className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
+            {/* 분야 구분 */}
+            <div className="flex items-center justify-between gap-3 px-5 py-3 bg-slate-50 border-b border-slate-200">
+              <div className="text-sm font-bold text-slate-900">분야: {sec.domain}</div>
+              <div className="text-xs text-slate-500">{sec.list.length}개 항목</div>
             </div>
 
-            {/* 테이블 헤더 */}
-            <div className="grid grid-cols-12 gap-3 px-4 py-3 text-xs font-semibold text-slate-600">
-              <div className="col-span-1 text-center">유형</div>
-              <div className="col-span-1 text-center">영역</div>
-              <div className="col-span-1 text-center">코드</div>
-              {/* 항목/현황은 가장 중요: 거의 같은 폭으로 */}
-              <div className="col-span-4">항목</div>
-              <div className="col-span-4">현황(status)</div>
-              <div className="col-span-1 text-center">결과</div>
-              <div className="col-span-1 text-center">저장</div>
+            {/* 헤더 */}
+            <div
+              className="
+                grid gap-3 px-5 py-3 text-xs font-semibold text-slate-600
+                border-b border-slate-200 bg-white
+                grid-cols-[72px_140px_96px_minmax(260px,1fr)_minmax(260px,1fr)_120px_88px]
+              "
+            >
+              <div className="text-center">유형</div>
+              <div className="truncate">영역</div>
+              <div className="text-center">코드</div>
+              <div>항목</div>
+              <div>현황(status)</div>
+              <div className="text-center">결과</div>
+              <div className="text-center">저장</div>
             </div>
 
-            {/* 행 */}
+            {/* rows */}
             <div className="divide-y divide-slate-100">
-              {items.map((it) => {
-                const code = String(it?.code ?? "");
-                const saved = getSavedResult(it);
-                const draft = normalizeResult(draftMap?.[code]?.resultDraft ?? saved);
+              {sec.list.map((it) => {
+                const code = normalizeText(it.code);
+                const saved = savedMap[code] || getItemResult(it);
+                const draft = draftMap[code] || "";
+                const effective = draft || saved; // 화면 표시용(저장 전 선택도 보이게)
+                const statusText = normalizeText(it.status);
 
                 return (
-                  <div key={code || Math.random()} className="grid grid-cols-12 gap-3 px-4 py-4">
-                    {/* 유형/영역/코드: 폭 줄이고 가운데 정렬 */}
-                    <div className="col-span-1 flex items-start justify-center">
-                      <span className="text-xs text-slate-700">{it?.type || "-"}</span>
-                    </div>
-                    <div className="col-span-1 flex items-start justify-center">
-                      <span className="text-xs text-slate-700">{it?.area || "-"}</span>
-                    </div>
-                    <div className="col-span-1 flex items-start justify-center">
-                      <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] text-slate-700">{it?.code || "-"}</span>
+                  <div
+                    key={code || `${sec.domain}-${Math.random()}`}
+                    className="
+                      grid gap-3 px-5 py-4 items-start
+                      grid-cols-[72px_140px_96px_minmax(260px,1fr)_minmax(260px,1fr)_120px_88px]
+                    "
+                  >
+                    {/* 유형 */}
+                    <div className="text-sm text-slate-700 text-center">{normalizeText(it.type)}</div>
+
+                    {/* 영역 */}
+                    <div className="text-sm text-slate-700 truncate">{normalizeText(it.area)}</div>
+
+                    {/* 코드 */}
+                    <div className="flex justify-center">
+                      <span className="px-3 py-1 rounded-full bg-slate-100 text-slate-700 text-xs font-semibold">
+                        {normalizeText(it.code)}
+                      </span>
                     </div>
 
-                    {/* 항목(질문) */}
-                    <div className="col-span-4">
-                      <div className="text-sm font-semibold text-slate-900">{it?.item || ""}</div>
+                    {/* 항목 */}
+                    <div className="text-sm text-slate-900 leading-relaxed">
+                      {normalizeText(it.item)}
                     </div>
 
-                    {/* 현황(status): 개행 보존 + 파란색 강조 */}
-                    <div className="col-span-4">
-                      <div className="rounded-2xl border border-blue-200 bg-blue-50 p-3">
-                        <div className="text-[11px] font-semibold text-blue-800">현황</div>
-                        <pre className="mt-1 whitespace-pre-wrap break-words text-sm text-blue-900">{it?.status || "(현황 없음)"}</pre>
+                    {/* 현황(status) - 개행 유지 + 파란 강조 */}
+                    <div className="rounded-xl border border-blue-200 bg-blue-50 p-3">
+                      <div className="text-xs font-semibold text-blue-700 mb-1">현황</div>
+                      <div className="text-sm text-blue-900 whitespace-pre-wrap leading-relaxed">
+                        {statusText || "—"}
                       </div>
                     </div>
 
-                    {/* 결과: 폭 줄이고 가운데 정렬 + 색상 */}
-                    <div className="col-span-1 flex flex-col items-center gap-2">
-                      <div className="flex items-center justify-center">
-                        <ResultPill value={draft} />
-                      </div>
-                      {/* 선택 UI: draft만 변경(=저장 전 반영 X) */}
-                      <div className="flex flex-col gap-1">
-                        <button
-                          type="button"
-                          className={`rounded-lg px-2 py-1 text-xs font-semibold transition ${
-                            draft === "양호" ? "bg-blue-600 text-white" : "border border-blue-200 bg-white text-blue-700"
+                    {/* 결과 버튼 */}
+                    <div className="flex flex-col items-center justify-start gap-2 pt-1">
+                      <ResultPill
+                        label="양호"
+                        color="blue"
+                        active={effective === "양호"}
+                        onClick={() => setDraft(code, "양호")}
+                      />
+                      <ResultPill
+                        label="취약"
+                        color="red"
+                        active={effective === "취약"}
+                        onClick={() => setDraft(code, "취약")}
+                      />
+
+                      {/* 저장 상태 표시 */}
+                      {saved ? (
+                        <div
+                          className={`text-[11px] font-semibold ${
+                            saved === "취약" ? "text-red-600" : "text-blue-600"
                           }`}
-                          onClick={() => setDraftResult(code, "양호")}
                         >
-                          양호
-                        </button>
-                        <button
-                          type="button"
-                          className={`rounded-lg px-2 py-1 text-xs font-semibold transition ${
-                            draft === "취약" ? "bg-red-600 text-white" : "border border-red-200 bg-white text-red-700"
-                          }`}
-                          onClick={() => setDraftResult(code, "취약")}
-                        >
-                          취약
-                        </button>
-                      </div>
+                          저장됨
+                        </div>
+                      ) : (
+                        <div className="text-[11px] text-slate-400">미저장</div>
+                      )}
                     </div>
 
-                    {/* 저장: 누를 때만 Sheets 반영 */}
-                    <div className="col-span-1 flex items-start justify-center">
+                    {/* 저장 버튼 */}
+                    <div className="flex justify-center pt-1">
                       <button
                         type="button"
                         onClick={() => saveResult(it)}
-                        disabled={savingCode === code}
-                        className={`rounded-xl px-3 py-2 text-xs font-bold text-white ${
-                          savingCode === code ? "bg-slate-400" : "bg-slate-900 hover:bg-slate-800"
-                        }`}
+                        disabled={savingCode === code || (draftMap[code] !== "양호" && draftMap[code] !== "취약")}
+                        className="
+                          rounded-xl px-4 py-2 text-sm font-semibold
+                          bg-slate-900 text-white disabled:opacity-40 disabled:cursor-not-allowed
+                          hover:bg-slate-800
+                        "
+                        title="선택한 결과를 저장"
                       >
                         {savingCode === code ? "저장중" : "저장"}
                       </button>
@@ -290,16 +345,14 @@ export default function VulnIdentifyPanel({ checklistItems = [], onUpdated }) {
                 );
               })}
 
-              {items.length === 0 && (
-                <div className="px-4 py-8 text-center text-sm text-slate-500">표시할 항목이 없습니다.</div>
+              {sec.list.length === 0 && (
+                <div className="px-5 py-10 text-center text-sm text-slate-500">
+                  표시할 항목이 없습니다.
+                </div>
               )}
             </div>
           </div>
         ))}
-
-        {groupedByDomain.length === 0 && (
-          <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">표시할 항목이 없습니다.</div>
-        )}
       </div>
     </div>
   );
