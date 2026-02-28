@@ -22,7 +22,6 @@ import { score, gradeFromScore } from "./utils/scoring";
 import { readSheet } from "./lib/sheetsApi";
 
 const STEPS = [
-  { key: "assets", title: "자산 식별", desc: "정보자산 등록 및 중요도 식별" },
   { key: "checklist", title: "통제 항목 관리", desc: "통제 기준 및 항목 정의/관리" },
   { key: "status", title: "통제 이행 점검", desc: "통제 항목별 운영 현황 기록" },
   { key: "vuln", title: "취약 도출", desc: "이행 미흡 항목 기반 취약 식별" },
@@ -75,7 +74,7 @@ function applyResidualByTreatment(baseImpact, baseLikelihood, treatment) {
 
 export default function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [activeStep, setActiveStep] = useState("assets");
+  const [activeStep, setActiveStep] = useState("status");
   const [checklistReloadKey, setChecklistReloadKey] = useState(0);
 
   const [matrix, setMatrix] = useState("5x5");
@@ -318,17 +317,16 @@ export default function App() {
       <div className="w-full px-4 py-6">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <div className="text-lg font-bold text-slate-900">ISMS 위험관리 v4.0 (체크리스트 완전 중심)</div>
-            <div className="text-sm text-slate-500">Checklist 시트 값이 모든 메뉴의 단일 기준(SSOT)입니다.</div>
+            <div className="text-lg font-bold text-slate-900">체크리스트 기반 위험평가 시스템</div>
           </div>
           {headerRight}
         </div>
 
-        <div className="mt-5 flex gap-4">
+        <div className="mt-5 flex flex-col md:flex-row gap-4">
           {/* Left Sidebar */}
-          <div className={`${sidebarCollapsed ? "w-0" : "w-[320px]"} transition-all overflow-hidden shrink-0`}>
+          <div className={`md:${sidebarCollapsed ? "w-0" : "w-[190px]"} w-full transition-all overflow-hidden shrink-0`}>
             <div className="space-y-4">
-              <Card title="프로세스 단계" desc="왼쪽 단계는 그대로 따라가도록 설계" right={<Badge>Matrix {matrix}</Badge>}>
+              <Card title="프로세스 단계" right={<Badge>Matrix {matrix}</Badge>}>
                 <div className="space-y-2">
                   {STEPS.map((s, idx) => {
                     const active = s.key === activeStep;
@@ -409,8 +407,9 @@ export default function App() {
           </div>
 
           {/* Right Body */}
-          <div className="flex-1 w-full">
-            <Card title={`${panelTitle}`} desc={panelDesc} right={<Badge>Work-in-Progress</Badge>}>
+          <div className="flex-1 min-w-0">
+          const stepIndex = STEPS.findIndex(s => s.key === activeStep);
+              <Card title={`${stepIndex + 1}. ${panelTitle}`} desc={panelDesc} right={<Badge>Work-in-Progress</Badge>}>
               {activeStep === "assets" ? <AssetsPanel assets={assets} setAssets={setAssets} /> : null}
 
               {activeStep === "checklist" ? (
