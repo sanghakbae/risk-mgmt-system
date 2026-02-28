@@ -5,7 +5,7 @@ import React, { useMemo } from "react";
  * - "대시보드" 메뉴 전용 화면
  * - checklistItems(SSOT: Checklist 시트 로드 결과)만을 기준으로 KPI를 계산해서 보여줌
  *
- * 요구 KPI (사용자 정의)
+ * KPI
  * 1) 통제 항목 관리: 통제 갯수
  * 2) 통제 이행 점검: 진행률 (status 입력된 항목 / 전체)
  * 3) 취약 도출: 진행률 (result=양호/취약 저장된 항목 / 전체)
@@ -22,15 +22,26 @@ function pct(done, total) {
   return Math.round((done / total) * 100);
 }
 
-function KpiCard({ title, value, sub, barPct }) {
+function KpiCard({ title, value, sub, barPct, tone = "default" }) {
+  const toneCls =
+    tone === "blue"
+      ? "border-blue-200 bg-blue-50"
+      : tone === "red"
+      ? "border-red-200 bg-red-50"
+      : "border-slate-200 bg-white";
+
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4">
+    <div className={`rounded-2xl border p-4 ${toneCls}`}>
       <div className="text-xs font-semibold text-slate-600">{title}</div>
       <div className="mt-1 text-2xl font-bold text-slate-900">{value}</div>
       {sub ? <div className="mt-1 text-xs text-slate-500">{sub}</div> : null}
+
       {typeof barPct === "number" ? (
         <div className="mt-3 h-2 w-full rounded-full bg-slate-100 overflow-hidden">
-          <div className="h-full bg-slate-900" style={{ width: `${Math.max(0, Math.min(100, barPct))}%` }} />
+          <div
+            className="h-full bg-slate-900"
+            style={{ width: `${Math.max(0, Math.min(100, barPct))}%` }}
+          />
         </div>
       ) : null}
     </div>
