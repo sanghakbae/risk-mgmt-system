@@ -235,12 +235,7 @@ export default function VulnIdentifyPanel({ checklistItems = [], onUpdated }) {
     <div className="space-y-4">
       {/* 헤더 + 진행률(통제 이행 점검과 동일한 레이아웃) */}
       <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-4">
-        <div>
-          <div className="text-lg font-bold text-slate-900">취약 도출</div>
-          <div className="text-sm text-slate-600">
-            통제 이행 점검의 현황(status)을 근거로 각 항목의 결과(양호/취약)와 사유를 작성하여 저장합니다.
-          </div>
-        </div>
+       
 
         <ProgressBar
           done={progress.done}
