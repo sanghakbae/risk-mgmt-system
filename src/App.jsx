@@ -410,7 +410,7 @@ export default function App() {
 
           {/* Right Body */}
           <div className="flex-1 w-full">
-            <Card title={`1. ${panelTitle}`} desc={panelDesc} right={<Badge>Work-in-Progress</Badge>}>
+            <Card title={`${panelTitle}`} desc={panelDesc} right={<Badge>Work-in-Progress</Badge>}>
               {activeStep === "assets" ? <AssetsPanel assets={assets} setAssets={setAssets} /> : null}
 
               {activeStep === "checklist" ? (
