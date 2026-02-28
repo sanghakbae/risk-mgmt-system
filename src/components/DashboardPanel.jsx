@@ -90,8 +90,8 @@ export default function DashboardPanel({ checklistItems = [] }) {
           sub={`${kpi.vulnDone}/${kpi.total} (양호/취약 저장 완료)`}
           barPct={kpi.vulnPct}
         />
-        <KpiCard title="위험 평가" value={`${kpi.impactCount}건`} sub="impact(영향도) 지정된 항목 수" />
-        <KpiCard title="위험 처리" value={`${kpi.riskCount}건`} sub="result=취약 항목 수" />
+        <KpiCard title="위험 평가" value={`${kpi.impactCount}건`} sub="impact(영향도) 지정된 항목 수" tone="blue" />
+        <KpiCard title="위험 처리" value={`${kpi.riskCount}건`} sub="result=취약 항목 수" tone="red" />
       </div>
     </div>
   );
