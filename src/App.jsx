@@ -1,6 +1,7 @@
 import React, { useMemo, useState, useEffect } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
+import AssetsPanel from "./components/AssetsPanel";
 import ChecklistPanel from "./components/ChecklistPanel";
 import StatusWritePanel from "./components/StatusWritePanel";
 import VulnIdentifyPanel from "./components/VulnIdentifyPanel";
@@ -13,6 +14,7 @@ import ApprovePanel from "./components/ApprovePanel";
 import RiskEvaluatePanel from "./components/RiskEvaluatePanel";
 import RiskTreatmentPanel from "./components/RiskTreatmentPanel";
 import ResidualRiskPanel from "./components/ResidualRiskPanel";
+import DashboardPanel from "./components/DashboardPanel";
 
 import Card, { Badge } from "./ui/Card";
 import Button from "./ui/Button";
@@ -21,7 +23,8 @@ import { score, gradeFromScore } from "./utils/scoring";
 import { readSheet } from "./lib/sheetsApi";
 
 const STEPS = [
-  { key: "checklist", title: "통제 항목 관리", desc: "통제 기준 및 항목 정의/관리" },
+  { key: "dashboard", title: "대시보드", desc: "전체 현황 요약" },
+    { key: "checklist", title: "통제 항목 관리", desc: "통제 기준 및 항목 정의/관리" },
   { key: "status", title: "통제 이행 점검", desc: "통제 항목별 운영 현황 기록" },
   { key: "vuln", title: "취약 도출", desc: "이행 미흡 항목 기반 취약 식별" },
   { key: "analysis", title: "위험 평가", desc: "위험도 산정 및 허용 기준 비교" },
@@ -72,12 +75,8 @@ function applyResidualByTreatment(baseImpact, baseLikelihood, treatment) {
 }
 
 export default function App() {
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
-    // 모바일/좁은 화면에서는 기본으로 사이드바를 접어 콘텐츠 영역을 우선합니다.
-    if (typeof window === "undefined") return false;
-    return window.innerWidth < 768;
-  });
-  const [activeStep, setActiveStep] = useState("status");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [activeStep, setActiveStep] = useState("dashboard");
   const [checklistReloadKey, setChecklistReloadKey] = useState(0);
 
   const [matrix, setMatrix] = useState("5x5");
@@ -312,6 +311,7 @@ export default function App() {
     </div>
   );
 
+  const stepIndex = Math.max(0, STEPS.findIndex((s) => s.key === activeStep));
   const panelTitle = STEPS.find((s) => s.key === activeStep)?.title ?? "";
   const panelDesc = STEPS.find((s) => s.key === activeStep)?.desc ?? "";
 
@@ -321,16 +321,14 @@ export default function App() {
         <div className="flex items-start justify-between gap-4">
           <div>
             <div className="text-lg font-bold text-slate-900">체크리스트 기반 위험평가 시스템</div>
-            <div className="text-sm text-slate-500">Checklist 시트가 모든 메뉴의 단일 기준(SSOT)입니다.</div>
-          </div>
           {headerRight}
         </div>
 
-        <div className="mt-5 flex gap-4">
+        <div className="mt-5 flex flex-col md:flex-row gap-4">
           {/* Left Sidebar */}
-          <div className={`${sidebarCollapsed ? "w-0" : "w-[220px]"} transition-all overflow-hidden shrink-0`}>
+          <div className={`${sidebarCollapsed ? "w-0" : "w-full md:w-[210px]"} transition-all overflow-hidden shrink-0`}>
             <div className="space-y-4">
-              <Card title="프로세스" right={<Badge>Matrix {matrix}</Badge>}>
+              <Card title="프로세스">
                 <div className="space-y-2">
                   {STEPS.map((s, idx) => {
                     const active = s.key === activeStep;
@@ -383,37 +381,14 @@ export default function App() {
                   </Button>
                 </div>
               </Card>
-
-              <Card title="설정" desc="허용기준/매트릭스">
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <div className="text-xs font-semibold text-slate-700">평가 매트릭스</div>
-                    <div className="mt-1">
-                      <Select value={matrix} onChange={setMatrix} options={["3x3", "5x5"].map((x) => ({ value: x, label: x }))} />
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-xs font-semibold text-slate-700">허용기준 (≤)</div>
-                    <div className="mt-1">
-                      <input
-                        type="number"
-                        min={1}
-                        max={25}
-                        value={acceptThreshold}
-                        onChange={(e) => setAcceptThreshold(Number(e.target.value || 0))}
-                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
-                      />
-                    </div>
-                  </div>
-                </div>
-              </Card>
-            </div>
+</div>
           </div>
 
           {/* Right Body */}
-          <div className="flex-1 w-full">
-            <Card title={`${panelTitle}`} desc={panelDesc} right={<Badge>Work-in-Progress</Badge>}>
-              
+          <div className="flex-1 min-w-0">
+            <Card title={`${stepIndex + 1}. ${panelTitle}`} desc={panelDesc} right={<Badge>Work-in-Progress</Badge>}>
+              {activeStep === "dashboard" ? <DashboardPanel checklistItems={checklistItems} /> : null}
+
               {activeStep === "checklist" ? (
                 <ChecklistPanel
                   checklistItems={checklistItems}
