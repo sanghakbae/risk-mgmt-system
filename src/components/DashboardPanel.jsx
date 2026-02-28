@@ -1,16 +1,5 @@
 import React, { useMemo } from "react";
-import MermaidChart from "./Mermaid";
 
-const FLOW = 'flowchart LR A["Checklist Sheet [SSOT]"]-->B["Dashboard [KPI 요약]"] B-->C["통제 항목 관리 [통제 개수]"] C-->D["통제 이행 점검 [status 작성]"] D-->E["취약 도출 [result, result_detail 저장]"] E-->F["위험 평가 [impact, likelihood]"] F-->G["위험 처리 [treatment]"] A-->C A-->D A-->E A-->F A-->G';
-
-export default function DashboardPanel({ checklistItems = [] }) {
-  return (
-    <div className="space-y-4">
-      {/* 기존 KPI 카드들 ... */}
-      <MermaidChart code={FLOW} />
-    </div>
-  );
-}
 /**
  * DashboardPanel.jsx
  * - "대시보드" 메뉴 전용 화면
