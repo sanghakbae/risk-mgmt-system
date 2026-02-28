@@ -20,10 +20,11 @@ import Select from "../ui/Select";
 import { updateFields } from "../lib/sheetsApi";
 
 /** StatusWritePanel 과 동일한 스타일의 진행률 바(텍스트 + 얇은 바) */
-function ProgressBar({ done, total, label }) {
+// 통제 이행 점검 페이지의 진행률 UI와 동일한 스타일(요구사항)
+function ProgressBar({ done, total, label, helper }) {
   const pct = total > 0 ? Math.round((done / total) * 100) : 0;
   return (
-    <div className="space-y-1">
+    <div className="space-y-2">
       <div className="flex items-center justify-between text-xs text-slate-600">
         <div className="font-semibold">{label}</div>
         <div>
@@ -33,6 +34,7 @@ function ProgressBar({ done, total, label }) {
       <div className="h-2 w-full rounded-full bg-slate-100 overflow-hidden">
         <div className="h-2 bg-slate-900" style={{ width: `${pct}%` }} />
       </div>
+      {helper ? <div className="text-xs text-slate-600">{helper}</div> : null}
     </div>
   );
 }
@@ -182,6 +184,12 @@ export default function VulnIdentifyPanel({ checklistItems = [], onUpdated }) {
     setDraftDetailMap((prev) => ({ ...prev, [code]: v }));
   }
 
+  /**
+   * 한 항목 저장
+   * - "저장" 버튼을 눌렀을 때만 시트에 반영되게 해야 함(요구사항)
+   * - sheetsApi.updateFields 시그니처는 StatusWritePanel과 동일하게 사용:
+   *     updateFields(sheetName, code, fields)
+   */
   async function saveOne(item) {
     const code = normalizeText(item.code).trim();
     if (!code) return;
@@ -195,16 +203,19 @@ export default function VulnIdentifyPanel({ checklistItems = [], onUpdated }) {
 
     setSavingCode(code);
     try {
-      // 컬럼명이 다를 수 있으므로 안전하게 둘 다 전달
-      await updateFields([
-        {
-          code,
-          vulnResult: draftResult,
-          result: draftResult,
-          result_detail: draftDetail,
-          resultDetail: draftDetail,
-        },
-      ]);
+      // ✅ Checklist 시트에 결과/사유 저장
+      // - 결과 컬럼: result / vulnResult / vuln_result 중 존재하는 컬럼에 반영
+      // - 사유 컬럼: result_detail / resultDetail 중 존재하는 컬럼에 반영
+      await updateFields("Checklist", code, {
+        // 결과(양호/취약)
+        result: draftResult,
+        vulnResult: draftResult,
+        vuln_result: draftResult,
+
+        // 사유
+        result_detail: draftDetail,
+        resultDetail: draftDetail,
+      });
 
       // 저장 성공 시 savedMap 갱신
       setSavedMap((prev) => ({
@@ -225,19 +236,18 @@ export default function VulnIdentifyPanel({ checklistItems = [], onUpdated }) {
       {/* 헤더 + 진행률(통제 이행 점검과 동일한 레이아웃) */}
       <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-4">
         <div>
-          <div className="text-lg font-bold text-slate-900">2. 취약 도출</div>
+          <div className="text-lg font-bold text-slate-900">취약 도출</div>
           <div className="text-sm text-slate-600">
             통제 이행 점검의 현황(status)을 근거로 각 항목의 결과(양호/취약)와 사유를 작성하여 저장합니다.
           </div>
         </div>
 
-        {/* ✅ 통제 이행 점검과 동일한 스타일 카드 */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
-          <ProgressBar done={progress.done} total={progress.total} label="취약 도출 진행률 (전체 통제 기준)" />
-          <div className="text-xs text-slate-500">
-            분야(domain) 필터와 무관하게 전체 통제 개수 대비 저장된 결과(양호/취약) 기준으로 계산합니다.
-          </div>
-        </div>
+        <ProgressBar
+          done={progress.done}
+          total={progress.total}
+          label="취약 도출 진행률 (전체 통제 기준)"
+          helper="분야(domain) 필터와 무관하게 전체 통제 개수 대비 저장된 결과(양호/취약) 기준으로 계산합니다."
+        />
       </div>
 
       {/* 필터 */}
