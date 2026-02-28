@@ -128,23 +128,16 @@ export default function StatusWritePanel({ checklistItems, onUpdated }) {
     <div className="space-y-4">
       {/* 상단 진행률 */}
       <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
-        <ProgressBar
-          done={progress.done}
-          total={progress.total}
-          label="통제 이행 점검 진행률 (status 작성 기준)"
-        />
+        <ProgressBar done={progress.done} total={progress.total} label="통제 이행 점검 진행률 (status 작성 기준)" />
         <div className="text-sm text-slate-600">
-          도메인(분야) 선택 → 각 통제 항목의 현황을 입력 → 저장 시 Checklist 시트의{" "}
-          <b>status</b> 컬럼에 반영됩니다.
+          도메인(분야) 선택 → 각 통제 항목의 현황을 입력 → 저장 시 Checklist 시트의 <b>status</b> 컬럼에 반영됩니다.
         </div>
       </div>
 
       {/* 필터 */}
       <div className="rounded-2xl border border-slate-200 bg-white p-4 flex flex-col lg:flex-row gap-3 lg:items-end">
         <div className="flex-1">
-          <div className="text-xs font-semibold text-slate-700 mb-1">
-            분야(domain)
-          </div>
+          <div className="text-xs font-semibold text-slate-700 mb-1">분야(domain)</div>
           <Select
             value={selectedDomain}
             onChange={(v) => setSelectedDomain(v)}
@@ -163,90 +156,110 @@ export default function StatusWritePanel({ checklistItems, onUpdated }) {
         </div>
       </div>
 
-      {/* 편집 테이블 (Table.jsx는 row가 button이라 textarea랑 충돌 -> 직접 렌더) */}
+      {/*
+        편집 테이블
+        - Table.jsx는 row가 button이라 textarea와 충돌 -> 직접 렌더
+        - ✅ 요청사항 반영
+          1) 진행률은 "도메인별"이 아니라 "전체 통제 갯수 대비"(progress done/total)로 계산
+          2) 유형/영역/분야/코드는 최대한 좁게(식별용)
+          3) 항목/현황(status)은 가장 중요한 작성 영역이므로 넓게
+
+        구현 포인트
+        - Tailwind arbitrary grid-template-columns 사용
+        - 작은 화면에서는 가로 스크롤(overflow-x-auto)로 깨짐 방지
+      */}
       <div className="rounded-2xl border border-slate-200 overflow-hidden bg-white">
-        {/* header */}
-        <div className="grid grid-cols-12 bg-slate-50 text-xs font-semibold text-slate-700">
-          {/*
-            ✅ 컬럼 폭 정책
-            - 유형/영역/분야/코드: "식별용" -> 최대한 좁게
-            - 항목/현황(status): "실제 작성/확인" -> 넓게
-            grid-cols-12 기준:
-              유형(1) + 영역(1) + 분야(1) + 코드(1) + 항목(4) + 현황(3) + 저장(1) = 12
-          */}
-          <div className="col-span-1 px-2 py-3 text-center">유형</div>
-          <div className="col-span-1 px-2 py-3 text-center">영역</div>
-          <div className="col-span-1 px-2 py-3 text-center">분야</div>
-          <div className="col-span-1 px-2 py-3 text-center">코드</div>
-          <div className="col-span-4 px-3 py-3 text-center">항목</div>
-          <div className="col-span-3 px-3 py-3 text-center">현황(status)</div>
-          <div className="col-span-1 px-3 py-3 text-center">저장</div>
-        </div>
-
-        {/* rows */}
-        <div className="divide-y">
-          {pageRows.map((r) => {
-            const code = String(r.code || "").trim();
-            const done = String(r.status || "").trim() !== "";
-            return (
-              <div key={code} className="grid grid-cols-12 items-stretch">
-                {/* 유형/영역/분야는 개행 금지 */}
-                <div className="col-span-1 px-2 py-3 text-xs text-slate-800 text-center whitespace-nowrap overflow-hidden text-ellipsis">
-                  {r.type || "-"}
-                </div>
-                <div className="col-span-1 px-2 py-3 text-xs text-slate-800 text-center whitespace-nowrap overflow-hidden text-ellipsis">
-                  {r.area || "-"}
-                </div>
-                <div className="col-span-1 px-2 py-3 text-xs text-slate-800 text-center whitespace-nowrap overflow-hidden text-ellipsis">
-                  {r.domain || "-"}
-                </div>
-
-                <div className="col-span-1 px-2 py-3 text-xs text-slate-800 text-center whitespace-nowrap overflow-hidden text-ellipsis">
-                  {code || "-"}
-                </div>
-
-                {/* 항목은 개행 허용 */}
-                <div className="col-span-4 px-3 py-3 text-sm text-slate-800 text-left whitespace-pre-wrap break-words">
-                  {r.itemCode || "-"}
-                </div>
-
-                {/* status 입력 */}
-                <div className="col-span-3 px-3 py-2">
-                  <textarea
-                    value={String(draft[code] ?? "")}
-                    onChange={(e) =>
-                      setDraft((prev) => ({ ...prev, [code]: e.target.value }))
-                    }
-                    rows={2}
-                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
-                    placeholder="운영현황/미흡사항/예외 등"
-                  />
-                </div>
-
-                {/* 저장 버튼: status가 있으면 완료(파랑)로 유지 */}
-                <div className="col-span-1 px-3 py-3 flex items-center justify-center">
-                  <button
-                    type="button"
-                    onClick={() => saveOne(code)}
-                    disabled={savingCode === code}
-                    className={`rounded-xl px-3 py-2 text-sm font-semibold transition ${
-                      done
-                        ? "bg-blue-600 text-white hover:bg-blue-700"
-                        : "bg-slate-900 text-white hover:bg-slate-800"
-                    } ${savingCode === code ? "opacity-60 cursor-not-allowed" : ""}`}
-                  >
-                    {savingCode === code ? "저장중" : done ? "완료" : "저장"}
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-
-          {pageRows.length === 0 ? (
-            <div className="px-4 py-10 text-sm text-slate-500 text-center">
-              데이터가 없습니다.
+        <div className="overflow-x-auto">
+          <div className="min-w-[980px]">
+            {/* header */}
+            <div className="grid grid-cols-[72px_96px_140px_90px_1fr_minmax(280px,420px)_96px] bg-slate-50 text-xs font-semibold text-slate-700">
+              {/*
+                컬럼 정의(왼→오)
+                1) 유형: 72px
+                2) 영역: 96px
+                3) 분야: 140px
+                4) 코드: 90px
+                5) 항목: 1fr (가장 넓게)
+                6) 현황(status): minmax(280px, 420px)
+                7) 저장: 96px
+              */}
+              <div className="px-2 py-3 text-center">유형</div>
+              <div className="px-2 py-3 text-center">영역</div>
+              <div className="px-2 py-3 text-center">분야</div>
+              <div className="px-2 py-3 text-center">코드</div>
+              <div className="px-3 py-3 text-center">항목</div>
+              <div className="px-3 py-3 text-center">현황(status)</div>
+              <div className="px-3 py-3 text-center">저장</div>
             </div>
-          ) : null}
+
+            {/* rows */}
+            <div className="divide-y">
+              {pageRows.map((r) => {
+                const code = String(r.code || "").trim();
+                const done = String(r.status || "").trim() !== "";
+                return (
+                  <div
+                    key={code}
+                    className="grid grid-cols-[72px_96px_140px_90px_1fr_minmax(280px,420px)_96px] items-stretch"
+                  >
+                    {/* 유형/영역/분야/코드: 식별용(짧게), 줄바꿈 방지 */}
+                    <div className="px-2 py-3 text-xs text-slate-800 text-center whitespace-nowrap overflow-hidden text-ellipsis">
+                      {r.type || "-"}
+                    </div>
+                    <div className="px-2 py-3 text-xs text-slate-800 text-center whitespace-nowrap overflow-hidden text-ellipsis">
+                      {r.area || "-"}
+                    </div>
+                    <div className="px-2 py-3 text-xs text-slate-800 text-center whitespace-nowrap overflow-hidden text-ellipsis">
+                      {r.domain || "-"}
+                    </div>
+                    <div className="px-2 py-3 text-xs text-slate-800 text-center whitespace-nowrap overflow-hidden text-ellipsis">
+                      {code || "-"}
+                    </div>
+
+                    {/* 항목: 가장 중요한 본문(넓게), 줄바꿈 허용 */}
+                    <div className="px-3 py-3 text-sm text-slate-800 text-left whitespace-pre-wrap break-words">
+                      {r.itemCode || "-"}
+                    </div>
+
+                    {/* 현황(status): 작성 영역, 가독성을 위해 너비 확보 */}
+                    <div className="px-3 py-2">
+                      <textarea
+                        value={String(draft[code] ?? "")}
+                        onChange={(e) =>
+                          setDraft((prev) => ({ ...prev, [code]: e.target.value }))
+                        }
+                        rows={2}
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
+                        placeholder="운영현황/미흡사항/예외 등"
+                      />
+                    </div>
+
+                    {/* 저장: status가 있으면 완료(파랑)로 유지 */}
+                    <div className="px-3 py-3 flex items-center justify-center">
+                      <button
+                        type="button"
+                        onClick={() => saveOne(code)}
+                        disabled={savingCode === code}
+                        className={`rounded-xl px-3 py-2 text-sm font-semibold transition ${
+                          done
+                            ? "bg-blue-600 text-white hover:bg-blue-700"
+                            : "bg-slate-900 text-white hover:bg-slate-800"
+                        } ${savingCode === code ? "opacity-60 cursor-not-allowed" : ""}`}
+                      >
+                        {savingCode === code ? "저장중" : done ? "완료" : "저장"}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+
+              {pageRows.length === 0 ? (
+                <div className="px-4 py-10 text-sm text-slate-500 text-center">
+                  데이터가 없습니다.
+                </div>
+              ) : null}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -262,9 +275,7 @@ export default function StatusWritePanel({ checklistItems, onUpdated }) {
                 type="button"
                 onClick={() => setPage(p)}
                 className={`w-9 h-9 rounded-xl border text-sm font-semibold ${
-                  active
-                    ? "bg-slate-900 text-white border-slate-900"
-                    : "bg-white border-slate-200 hover:bg-slate-50"
+                  active ? "bg-slate-900 text-white border-slate-900" : "bg-white border-slate-200 hover:bg-slate-50"
                 }`}
               >
                 {p}
