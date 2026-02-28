@@ -1,40 +1,44 @@
 // src/components/VulnIdentifyPanel.jsx
-// 취약 도출(2단계) 화면
+// 취약 도출(2단계)
 //
-// 요구사항 정리
-// 1) 진행률: "분야별"이 아니라 "전체 통제 개수 대비" (결과가 저장된 항목 수 / 전체 항목 수)
-// 2) 분야(domain): 상단 셀렉트로 필터링. (전체 선택 시에는 분야 구분(섹션 헤더)도 보여줌)
-// 3) 현황(status): 통제 이행 점검 페이지처럼 "개행이 유지"되어 보이게(whitespace-pre-wrap) + 파란색 강조 박스
-// 4) 결과(양호/취약): 폭 줄이고 가운데 정렬. 취약=빨강, 양호=파랑.
-// 5) 저장: (양호/취약) 선택만으로는 반영되지 않고, "저장"을 눌렀을 때만 시트에 반영 + 저장표시(savedMap) 갱신
-// 6) 항목/현황: 화면에서 가장 중요하니 폭을 크게. (항목과 현황을 거의 동일 폭으로)
-// 7) 사유(result_detail): 항목/현황 다음에 입력 칸 제공. 사유 입력 + (양호/취약) 선택 + 저장 클릭 시에만 반영
+// ✅ 요구사항 반영 요약
+// 1) 진행률: (저장된 결과 수 / 전체 통제 수) = 필터와 무관하게 '전체 기준'
+// 2) 분야(domain): 상단 Select로 필터링
+//    - 전체("") 선택 시: 분야별 섹션 헤더(구분) 표시
+//    - 특정 분야 선택 시: 해당 분야만 표시(섹션 1개)
+// 3) 현황(status): 통제 이행 점검 페이지처럼 개행 유지(whitespace-pre-wrap) + 파란 강조 박스
+// 4) 결과(양호/취약): 폭 좁게 + 가운데 정렬, 색상(양호=파랑 / 취약=빨강)
+// 5) 저장: (양호/취약/사유) 입력만으로는 시트 반영 X, "저장" 클릭 시에만 updateFields 호출
+// 6) 항목(itemCode) / 현황(status): 가장 중요 → 넓게(거의 동일 폭)
+// 7) 사유(result_detail): 입력칸 추가 + 자동 높이 조절(내용에 맞춰 auto-resize)
 //
-// 데이터/함수 가정
-// - checklistItems: 상위에서 내려오는 데이터(시트 로드 결과)
-// - updateFields: code 기준으로 특정 컬럼을 업데이트하는 함수
-// - 시트 컬럼명이 프로젝트마다 다를 수 있어 result/vulnResult, result_detail/resultDetail 모두 대응
+// ⚠️ 중요: updateFields 시그니처는 StatusWritePanel 기준으로
+//   updateFields(sheetName, code, { colName: value, ... }) 형태로 사용한다.
+//
+// ⚠️ COLUMN_NOT_FOUND 대응
+// - 시트 컬럼명이 환경마다 다를 수 있어, 결과/사유 컬럼은 후보군을 순차 시도한다.
+// - updateFields가 "전달된 컬럼 중 하나라도 없으면 예외"를 던지는 구현일 가능성이 크므로,
+//   여러 컬럼을 한 번에 보내지 않고 '하나씩' 시도한다.
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import Select from "../ui/Select";
 import { updateFields } from "../lib/sheetsApi";
 
-/** StatusWritePanel 과 동일한 스타일의 진행률 바(텍스트 + 얇은 바) */
-// 통제 이행 점검 페이지의 진행률 UI와 동일한 스타일(요구사항)
-function ProgressBar({ done, total, label, helper }) {
+/** 통제 이행 점검 화면과 동일한 스타일의 진행률 카드 */
+function ProgressCard({ done, total, title, desc }) {
   const pct = total > 0 ? Math.round((done / total) * 100) : 0;
   return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between text-xs text-slate-600">
-        <div className="font-semibold">{label}</div>
-        <div>
+    <div className="rounded-2xl border border-slate-200 bg-white p-5">
+      <div className="flex items-center justify-between gap-4">
+        <div className="text-sm font-bold text-slate-900">{title}</div>
+        <div className="text-xs font-semibold text-slate-500">
           {done}/{total} ({pct}%)
         </div>
       </div>
-      <div className="h-2 w-full rounded-full bg-slate-100 overflow-hidden">
-        <div className="h-2 bg-slate-900" style={{ width: `${pct}%` }} />
+      {desc ? <div className="mt-2 text-sm text-slate-600">{desc}</div> : null}
+      <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-slate-100">
+        <div className="h-full bg-slate-900" style={{ width: `${pct}%` }} />
       </div>
-      {helper ? <div className="text-xs text-slate-600">{helper}</div> : null}
     </div>
   );
 }
@@ -44,82 +48,116 @@ function normalizeText(v) {
   return String(v);
 }
 
-/** 저장된 결과 컬럼명은 repo마다 다를 수 있어 둘 다 허용 */
-function getItemResult(item) {
+function getSavedResultFromItem(item) {
+  // 저장된 결과 컬럼명이 repo/시트마다 다를 수 있어 둘 다 허용
   return normalizeText(item.vulnResult || item.result || "").trim();
 }
 
-/** 저장된 사유 컬럼명은 repo마다 다를 수 있어 둘 다 허용 */
-function getItemResultDetail(item) {
-  return normalizeText(item.result_detail || item.resultDetail || "").trim();
+function getSavedReasonFromItem(item) {
+  // 사유 컬럼도 환경에 따라 다를 수 있어 후보를 넓게
+  return normalizeText(
+    item.result_detail || item.resultDetail || item.reason || item.detail || ""
+  );
 }
 
 function groupByDomain(items) {
   const map = new Map();
   items.forEach((it) => {
-    const d = normalizeText(it.domain || "미분류").trim() || "미분류";
+    const d = normalizeText(it.domain || "미분류");
     if (!map.has(d)) map.set(d, []);
     map.get(d).push(it);
   });
   return Array.from(map.entries()).map(([domain, list]) => ({ domain, list }));
 }
 
-/** textarea 높이를 내용에 맞춰 자동 조정 */
-function autoResizeTextarea(el) {
-  if (!el) return;
-  el.style.height = "auto";
-  el.style.height = `${el.scrollHeight}px`;
+/** textarea auto-resize (내용에 맞춰 높이 자동) */
+function useAutoResizeTextarea(value) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    // 높이 재계산: 먼저 auto로 줄였다가 scrollHeight만큼 확장
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [value]);
+  return ref;
 }
 
-function ResultPill({ label, color, active, onClick }) {
-  // ✅ 폭 줄이고 가운데 정렬(요구사항)
-  const base =
-    "w-[72px] px-3 py-1 rounded-full text-xs font-semibold border transition select-none text-center";
-  const activeCls =
-    color === "red"
-      ? "bg-red-600 border-red-600 text-white"
-      : "bg-blue-600 border-blue-600 text-white";
-  const idleCls =
-    color === "red"
-      ? "bg-white border-red-200 text-red-600 hover:bg-red-50"
-      : "bg-white border-blue-200 text-blue-600 hover:bg-blue-50";
+/**
+ * COLUMN_NOT_FOUND 발생을 피하기 위한 "후보 컬럼명" 순차 업데이트
+ * @param {string} sheetName - 시트명(예: "Checklist")
+ * @param {string} code - 항목 키(코드)
+ * @param {{result?: string, reason?: string}} payload
+ * @param {{result: string[], reason: string[]}} candidates
+ */
+async function updateWithFallbackColumns(sheetName, code, payload, candidates) {
+  const { result, reason } = payload;
 
-  return (
-    <button type="button" className={`${base} ${active ? activeCls : idleCls}`} onClick={onClick}>
-      {label}
-    </button>
-  );
+  // 1) 결과 저장
+  if (result != null) {
+    let ok = false;
+    let lastErr = null;
+    for (const col of candidates.result) {
+      try {
+        await updateFields(sheetName, code, { [col]: result });
+        ok = true;
+        break;
+      } catch (e) {
+        lastErr = e;
+        const msg = normalizeText(e?.message || e);
+        if (!msg.includes("COLUMN_NOT_FOUND")) throw e; // 다른 에러면 즉시 중단
+      }
+    }
+    if (!ok) throw lastErr || new Error("COLUMN_NOT_FOUND");
+  }
+
+  // 2) 사유 저장
+  if (reason != null) {
+    let ok = false;
+    let lastErr = null;
+    for (const col of candidates.reason) {
+      try {
+        await updateFields(sheetName, code, { [col]: reason });
+        ok = true;
+        break;
+      } catch (e) {
+        lastErr = e;
+        const msg = normalizeText(e?.message || e);
+        if (!msg.includes("COLUMN_NOT_FOUND")) throw e;
+      }
+    }
+    if (!ok) throw lastErr || new Error("COLUMN_NOT_FOUND");
+  }
 }
 
 export default function VulnIdentifyPanel({ checklistItems = [], onUpdated }) {
-  // 분야(domain) 필터
-  const [selectedDomain, setSelectedDomain] = useState("");
+  // ✅ 통제 이행 점검과 동일하게 Checklist 시트를 대상으로 업데이트
+  const SHEET_NAME = "Checklist";
 
+  // 분야 필터
+  const [selectedDomain, setSelectedDomain] = useState("");
   // 검색
   const [q, setQ] = useState("");
 
-  // code -> 저장된 결과/사유 (서버/시트 기준 스냅샷)
-  // 예: { "1.1.2.1": { result: "양호", detail: "..." } }
-  const [savedMap, setSavedMap] = useState({});
-
-  // code -> 임시 입력(저장 전)
-  const [draftResultMap, setDraftResultMap] = useState({});
-  const [draftDetailMap, setDraftDetailMap] = useState({});
+  // code -> 저장된 결과/사유 (시트 기준)
+  const [savedMap, setSavedMap] = useState({}); // { [code]: { result, reason } }
+  // code -> 저장 전 임시 입력 (클라이언트 기준)
+  const [draftMap, setDraftMap] = useState({}); // { [code]: { result, reason } }
 
   const [savingCode, setSavingCode] = useState(null);
+  const [error, setError] = useState("");
 
-  // ✅ checklistItems가 바뀌면 savedMap을 다시 동기화(시트에 저장된 값 기준)
+  // 초기/갱신 시 savedMap 동기화
   useEffect(() => {
     const m = {};
     (checklistItems || []).forEach((it) => {
       const code = normalizeText(it.code).trim();
       if (!code) return;
-      const r = getItemResult(it);
-      const d = getItemResultDetail(it);
-      if (r || d) m[code] = { result: r, detail: d };
+      const result = getSavedResultFromItem(it);
+      const reason = getSavedReasonFromItem(it);
+      if (result || reason) m[code] = { result, reason };
     });
     setSavedMap(m);
-    // ⚠ draft는 사용자가 입력 중인 값이 있을 수 있으므로 강제 초기화하지 않음(유지보수 측면에서 안전)
   }, [checklistItems]);
 
   // 도메인 목록
@@ -132,24 +170,26 @@ export default function VulnIdentifyPanel({ checklistItems = [], onUpdated }) {
     return Array.from(set);
   }, [checklistItems]);
 
-  // ✅ 전체 진행률(필터/검색과 무관하게 "전체 통제" 기준)
+  // 전체 진행률(필터 무관)
   const progress = useMemo(() => {
     const total = (checklistItems || []).length;
     let done = 0;
     (checklistItems || []).forEach((it) => {
       const code = normalizeText(it.code).trim();
       if (!code) return;
-      const saved = savedMap[code]?.result || getItemResult(it);
-      if (saved === "양호" || saved === "취약") done += 1;
+      const savedResult = savedMap[code]?.result || getSavedResultFromItem(it);
+      if (savedResult === "양호" || savedResult === "취약") done += 1;
     });
     return { done, total };
   }, [checklistItems, savedMap]);
 
-  // 검색/필터 적용된 items
+  // 검색/필터 적용
   const filtered = useMemo(() => {
     const query = q.trim().toLowerCase();
     return (checklistItems || []).filter((it) => {
-      const domainOk = selectedDomain ? normalizeText(it.domain).trim() === selectedDomain : true;
+      const domainOk = selectedDomain
+        ? normalizeText(it.domain).trim() === selectedDomain
+        : true;
       if (!domainOk) return false;
 
       if (!query) return true;
@@ -158,10 +198,10 @@ export default function VulnIdentifyPanel({ checklistItems = [], onUpdated }) {
         it.area,
         it.domain,
         it.code,
-        it.itemCode, // ✅ 항목은 itemCode 컬럼
+        it.itemCode,
         it.status,
-        getItemResult(it),
-        getItemResultDetail(it),
+        getSavedResultFromItem(it),
+        getSavedReasonFromItem(it),
       ]
         .map(normalizeText)
         .join(" ")
@@ -170,62 +210,102 @@ export default function VulnIdentifyPanel({ checklistItems = [], onUpdated }) {
     });
   }, [checklistItems, selectedDomain, q]);
 
-  // "전체" 선택이면 domain별 섹션으로 구분, 특정 domain 선택이면 단일 섹션
+  // 전체 선택이면 domain 섹션 구분
   const sections = useMemo(() => {
     if (selectedDomain) return [{ domain: selectedDomain, list: filtered }];
     return groupByDomain(filtered);
   }, [filtered, selectedDomain]);
 
-  function setDraftResult(code, v) {
-    setDraftResultMap((prev) => ({ ...prev, [code]: v }));
+  function setDraft(code, patch) {
+    setDraftMap((prev) => ({
+      ...prev,
+      [code]: {
+        ...(prev[code] || {}),
+        ...patch,
+      },
+    }));
   }
 
-  function setDraftDetail(code, v) {
-    setDraftDetailMap((prev) => ({ ...prev, [code]: v }));
+  function ResultButton({ label, tone, active, onClick }) {
+    // tone: 'blue' | 'red'
+    const base =
+      "w-[64px] text-center rounded-full px-3 py-1 text-xs font-bold border transition select-none";
+    const activeCls =
+      tone === "red"
+        ? "bg-red-600 border-red-600 text-white"
+        : "bg-blue-600 border-blue-600 text-white";
+    const idleCls =
+      tone === "red"
+        ? "bg-white border-red-200 text-red-600 hover:bg-red-50"
+        : "bg-white border-blue-200 text-blue-600 hover:bg-blue-50";
+    return (
+      <button
+        type="button"
+        className={`${base} ${active ? activeCls : idleCls}`}
+        onClick={onClick}
+      >
+        {label}
+      </button>
+    );
   }
 
-  /**
-   * 한 항목 저장
-   * - "저장" 버튼을 눌렀을 때만 시트에 반영되게 해야 함(요구사항)
-   * - sheetsApi.updateFields 시그니처는 StatusWritePanel과 동일하게 사용:
-   *     updateFields(sheetName, code, fields)
-   */
-  async function saveOne(item) {
+  async function onSave(item) {
     const code = normalizeText(item.code).trim();
     if (!code) return;
 
-    // 저장 시점에만 반영되도록 draft를 사용
-    const draftResult = normalizeText(draftResultMap[code]).trim();
-    const draftDetail = normalizeText(draftDetailMap[code]);
-
-    // 결과는 반드시 양호/취약 중 하나여야 저장 가능
-    if (draftResult !== "양호" && draftResult !== "취약") return;
-
+    setError("");
     setSavingCode(code);
+
     try {
-      // ✅ Checklist 시트에 결과/사유 저장
-      // - 결과 컬럼: result / vulnResult / vuln_result 중 존재하는 컬럼에 반영
-      // - 사유 컬럼: result_detail / resultDetail 중 존재하는 컬럼에 반영
-      await updateFields("Checklist", code, {
-        // 결과(양호/취약)
-        result: draftResult,
-        vulnResult: draftResult,
-        vuln_result: draftResult,
+      const draft = draftMap[code] || {};
+      const draftResult = normalizeText(draft.result).trim();
+      const draftReason = normalizeText(draft.reason);
 
-        // 사유
-        result_detail: draftDetail,
-        resultDetail: draftDetail,
-      });
+      // 결과는 양호/취약만 허용
+      if (draftResult !== "양호" && draftResult !== "취약") {
+        setError("저장 실패: 결과(양호/취약)를 선택하세요.");
+        return;
+      }
 
-      // 저장 성공 시 savedMap 갱신
+      // 후보 컬럼명(시트마다 다를 수 있어 최대한 안전하게)
+      const candidates = {
+        result: ["vulnResult", "result", "vuln_result", "취약결과", "결과"],
+        reason: [
+          "result_detail",
+          "resultDetail",
+          "reason",
+          "detail",
+          "사유",
+          "비고",
+        ],
+      };
+
+      await updateWithFallbackColumns(
+        SHEET_NAME,
+        code,
+        { result: draftResult, reason: draftReason },
+        candidates
+      );
+
+      // UI 반영: 저장 성공 시 savedMap 갱신 + draft 제거
       setSavedMap((prev) => ({
         ...prev,
-        [code]: { result: draftResult, detail: draftDetail },
+        [code]: { result: draftResult, reason: draftReason },
       }));
+      setDraftMap((prev) => {
+        const next = { ...prev };
+        delete next[code];
+        return next;
+      });
 
       if (typeof onUpdated === "function") onUpdated();
     } catch (e) {
-      alert("저장 실패: " + String(e?.message || e));
+      const msg = normalizeText(e?.message || e);
+      if (msg.includes("COLUMN_NOT_FOUND")) {
+        setError("저장 실패: COLUMN_NOT_FOUND");
+      } else {
+        setError(`저장 실패: ${msg}`);
+      }
     } finally {
       setSavingCode(null);
     }
@@ -233,31 +313,32 @@ export default function VulnIdentifyPanel({ checklistItems = [], onUpdated }) {
 
   return (
     <div className="space-y-4">
-      {/* 헤더 + 진행률(통제 이행 점검과 동일한 레이아웃) */}
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-4">
-       
+      {/*
+        ✅ 요구사항: 빨간 박스(상단 "1. 취약 도출")는 이 컴포넌트에서 만든 것이 아니고
+        외부 레이아웃(상위 페이지/탭/스텝 래퍼)에서 생성된 것으로 보인다.
+        따라서 이 컴포넌트에서는 추가 헤더를 만들지 않는다.
+      */}
 
-        <ProgressBar
-          done={progress.done}
-          total={progress.total}
-          label="취약 도출 진행률 (전체 통제 기준)"
-          helper="분야(domain) 필터와 무관하게 전체 통제 개수 대비 저장된 결과(양호/취약) 기준으로 계산합니다."
-        />
-      </div>
+      {/* 진행률 (통제 이행 점검과 동일한 카드 스타일) */}
+      <ProgressCard
+        done={progress.done}
+        total={progress.total}
+        title="취약 도출 진행률 (전체 통제 기준)"
+        desc="분야(domain) 필터와 무관하게 전체 통제 개수 대비 저장된 결과(양호/취약) 기준으로 계산합니다."
+      />
 
       {/* 필터 */}
       <div className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-4 md:flex-row md:items-end">
         <div className="md:w-[280px]">
-          <div className="text-xs font-semibold text-slate-700 mb-1">분야(domain)</div>
+          <div className="mb-1 text-xs font-semibold text-slate-700">분야(domain)</div>
           <Select
             value={selectedDomain}
             onChange={(v) => setSelectedDomain(v)}
             options={[{ value: "", label: "전체" }, ...domains.map((d) => ({ value: d, label: d }))]}
           />
         </div>
-
         <div className="flex-1">
-          <div className="text-xs font-semibold text-slate-700 mb-1">검색</div>
+          <div className="mb-1 text-xs font-semibold text-slate-700">검색</div>
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
@@ -267,127 +348,135 @@ export default function VulnIdentifyPanel({ checklistItems = [], onUpdated }) {
         </div>
       </div>
 
-      {/* 섹션(분야별) */}
+      {/* 에러 표시 */}
+      {error ? (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+          {error}
+        </div>
+      ) : null}
+
+      {/* 결과 리스트 */}
       <div className="space-y-6">
         {sections.map((sec) => (
-          <div key={sec.domain} className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
-            {/* 분야 헤더 */}
-            <div className="flex items-center justify-between gap-3 px-5 py-3 bg-slate-50 border-b border-slate-200">
+          <div key={sec.domain} className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+            {/* 분야 헤더(전체 선택일 때 의미 있음) */}
+            <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-5 py-3">
               <div className="text-sm font-bold text-slate-900">분야: {sec.domain}</div>
               <div className="text-xs text-slate-500">{sec.list.length}개 항목</div>
             </div>
 
-            {/* 컬럼 헤더 */}
+            {/* 테이블 헤더 */}
             <div
-              className="grid gap-3 px-5 py-3 text-xs font-semibold text-slate-600 border-b border-slate-200 bg-white"
-              style={{
-                // ✅ 유형/영역/코드 폭 최소화, 항목/현황(그리고 사유) 폭 확대
-                gridTemplateColumns:
-                  "64px 120px 92px minmax(260px,1fr) minmax(260px,1fr) minmax(220px,1fr) 96px 88px",
-              }}
+              className={
+                "grid grid-cols-[72px_140px_96px_minmax(320px,1fr)_minmax(320px,1fr)_minmax(260px,1fr)_120px_96px] " +
+                "gap-3 border-b border-slate-200 bg-white px-5 py-3 text-xs font-semibold text-slate-600"
+              }
             >
               <div className="text-center">유형</div>
               <div className="truncate">영역</div>
               <div className="text-center">코드</div>
               <div>항목</div>
               <div>현황(status)</div>
-              <div>사유</div>
+              <div>사유(result_detail)</div>
               <div className="text-center">결과</div>
               <div className="text-center">저장</div>
             </div>
 
             {/* Rows */}
             <div className="divide-y divide-slate-100">
-              {sec.list.map((it) => {
+              {sec.list.map((it, idx) => {
                 const code = normalizeText(it.code).trim();
+                const key = code || `${sec.domain}-${idx}`;
+
+                // 저장된 값(시트 기준)
+                const savedResult = savedMap[code]?.result || getSavedResultFromItem(it);
+                const savedReason =
+                  savedMap[code]?.reason != null ? savedMap[code].reason : getSavedReasonFromItem(it);
+
+                // 임시 값(사용자 입력)
+                const draft = draftMap[code] || {};
+                const effectiveResult = normalizeText(draft.result || savedResult).trim();
+                const effectiveReason = normalizeText(draft.reason != null ? draft.reason : savedReason);
                 const statusText = normalizeText(it.status);
 
-                // ✅ 저장된 값(시트 기준)
-                const savedResult = savedMap[code]?.result || getItemResult(it);
-                const savedDetail = savedMap[code]?.detail || getItemResultDetail(it);
+                const reasonRef = useAutoResizeTextarea(effectiveReason);
 
-                // ✅ 드래프트(저장 전)
-                const draftResult = draftResultMap[code];
-                const draftDetail = draftDetailMap[code];
-
-                // 화면 표시용: 사용자가 무엇을 선택했는지 보이도록 draft를 우선 표시
-                const effectiveResult = draftResult || savedResult;
-
-                // 저장 가능 조건: 결과(양호/취약) 선택됨
-                const canSave = draftResult === "양호" || draftResult === "취약";
+                // 저장 버튼 활성화 조건
+                const canSave =
+                  (effectiveResult === "양호" || effectiveResult === "취약") &&
+                  (effectiveResult !== savedResult || effectiveReason !== savedReason);
 
                 return (
                   <div
-                    key={code || `${sec.domain}-${Math.random()}`}
-                    className="grid gap-3 px-5 py-4 items-start"
-                    style={{
-                      gridTemplateColumns:
-                        "64px 120px 92px minmax(260px,1fr) minmax(260px,1fr) minmax(220px,1fr) 96px 88px",
-                    }}
+                    key={key}
+                    className={
+                      "grid grid-cols-[72px_140px_96px_minmax(320px,1fr)_minmax(320px,1fr)_minmax(260px,1fr)_120px_96px] " +
+                      "gap-3 px-5 py-4 items-start"
+                    }
                   >
                     {/* 유형 */}
-                    <div className="text-sm text-slate-700 text-center">{normalizeText(it.type)}</div>
+                    <div className="text-center text-sm text-slate-700">{normalizeText(it.type)}</div>
 
                     {/* 영역 */}
-                    <div className="text-sm text-slate-700 truncate">{normalizeText(it.area)}</div>
+                    <div className="truncate text-sm text-slate-700">{normalizeText(it.area)}</div>
 
                     {/* 코드 */}
                     <div className="flex justify-center">
-                      <span className="px-3 py-1 rounded-full bg-slate-100 text-slate-700 text-xs font-semibold">
+                      <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
                         {normalizeText(it.code)}
                       </span>
                     </div>
 
-                    {/* ✅ 항목: itemCode 컬럼 */}
-                    <div className="text-sm text-slate-900 leading-relaxed">{normalizeText(it.itemCode)}</div>
+                    {/* 항목: itemCode */}
+                    <div className="text-sm leading-relaxed text-slate-900">
+                      {normalizeText(it.itemCode) || "—"}
+                    </div>
 
-                    {/* ✅ 현황(status) - 개행 유지 + 파란 강조 */}
+                    {/* 현황(status): 개행 유지 + 파란 박스 */}
                     <div className="rounded-xl border border-blue-200 bg-blue-50 p-3">
-                      <div className="text-xs font-semibold text-blue-700 mb-1">현황</div>
-                      <div className="text-sm text-blue-900 whitespace-pre-wrap leading-relaxed">
+                      <div className="mb-1 text-xs font-semibold text-blue-700">현황</div>
+                      <div className="whitespace-pre-wrap text-sm leading-relaxed text-blue-900">
                         {statusText || "—"}
                       </div>
                     </div>
 
-                    {/* ✅ 사유(result_detail) - 자동 높이 조절 */}
+                    {/* 사유(result_detail): textarea + auto-resize */}
                     <div>
+                      <div className="mb-1 text-xs font-semibold text-slate-700">사유</div>
                       <textarea
-                        className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-200 resize-none"
-                        placeholder="사유를 입력하세요 (저장 시 반영)"
-                        value={draftDetail != null ? draftDetail : savedDetail}
-                        onChange={(e) => {
-                          setDraftDetail(code, e.target.value);
-                          autoResizeTextarea(e.target);
-                        }}
-                        onInput={(e) => autoResizeTextarea(e.currentTarget)}
-                        rows={3}
+                        ref={reasonRef}
+                        value={effectiveReason}
+                        onChange={(e) => setDraft(code, { reason: e.target.value })}
+                        className={
+                          "w-full resize-none rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm " +
+                          "leading-relaxed outline-none focus:ring-2 focus:ring-slate-200"
+                        }
+                        placeholder="취약/양호 판단 사유를 입력하세요"
                       />
-                      <div className="mt-1 text-[11px] text-slate-400">
-                        저장 전 입력은 임시값이며, "저장" 클릭 시에만 시트에 반영됩니다.
-                      </div>
                     </div>
 
-                    {/* ✅ 결과: 폭 축소 + 가운데 정렬 + 색상 */}
-                    <div className="flex flex-col items-center justify-start gap-2 pt-1">
-                      <ResultPill
+                    {/* 결과 */}
+                    <div className="flex flex-col items-center justify-start gap-2 pt-6">
+                      <ResultButton
                         label="양호"
-                        color="blue"
+                        tone="blue"
                         active={effectiveResult === "양호"}
-                        onClick={() => setDraftResult(code, "양호")}
+                        onClick={() => setDraft(code, { result: "양호" })}
                       />
-                      <ResultPill
+                      <ResultButton
                         label="취약"
-                        color="red"
+                        tone="red"
                         active={effectiveResult === "취약"}
-                        onClick={() => setDraftResult(code, "취약")}
+                        onClick={() => setDraft(code, { result: "취약" })}
                       />
 
-                      {/* 저장 상태(시트 기준) */}
+                      {/* 저장됨 표시 */}
                       {savedResult ? (
                         <div
-                          className={`text-[11px] font-semibold ${
-                            savedResult === "취약" ? "text-red-600" : "text-blue-600"
-                          }`}
+                          className={
+                            "text-[11px] font-semibold " +
+                            (savedResult === "취약" ? "text-red-600" : "text-blue-600")
+                          }
                         >
                           저장됨
                         </div>
@@ -396,14 +485,18 @@ export default function VulnIdentifyPanel({ checklistItems = [], onUpdated }) {
                       )}
                     </div>
 
-                    {/* ✅ 저장 버튼 */}
-                    <div className="flex justify-center pt-1">
+                    {/* 저장 버튼 */}
+                    <div className="flex justify-center pt-6">
                       <button
                         type="button"
-                        onClick={() => saveOne(it)}
+                        onClick={() => onSave(it)}
                         disabled={!canSave || savingCode === code}
-                        className="rounded-xl px-4 py-2 text-sm font-semibold bg-slate-900 text-white disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-800"
-                        title="선택한 결과(양호/취약)와 사유를 저장"
+                        className={
+                          "rounded-xl px-4 py-2 text-sm font-semibold " +
+                          "bg-slate-900 text-white hover:bg-slate-800 " +
+                          "disabled:cursor-not-allowed disabled:opacity-40"
+                        }
+                        title="선택한 결과/사유를 저장"
                       >
                         {savingCode === code ? "저장중" : "저장"}
                       </button>
@@ -412,9 +505,9 @@ export default function VulnIdentifyPanel({ checklistItems = [], onUpdated }) {
                 );
               })}
 
-              {sec.list.length === 0 && (
+              {sec.list.length === 0 ? (
                 <div className="px-5 py-10 text-center text-sm text-slate-500">표시할 항목이 없습니다.</div>
-              )}
+              ) : null}
             </div>
           </div>
         ))}
