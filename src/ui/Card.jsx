@@ -1,9 +1,9 @@
 import React from "react";
 
-export default function Card({ title, desc, right, children }) {
+export default function Card({ title, desc, right, children, hideHeader = false }) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-      {title || desc || right ? (
+      {!hideHeader && (title || desc || right) ? (
         <div className="px-5 py-4 border-b border-slate-200 flex items-start justify-between gap-4">
           <div>
             {title ? <div className="text-base font-semibold text-slate-900">{title}</div> : null}
