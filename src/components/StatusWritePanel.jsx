@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import Select from "../ui/Select";
 import { updateFields } from "../lib/sheetsApi";
 
@@ -28,6 +28,19 @@ export default function StatusWritePanel({ checklistItems, onUpdated }) {
   const [draft, setDraft] = useState({}); // code -> status text
   const [savingCode, setSavingCode] = useState(null);
 
+  /**
+   * ✅ textarea 자동 높이 조절(가독성 개선)
+   * - 현황(status)은 길어질 수 있으므로, 입력값에 따라 높이를 자동으로 늘린다.
+   * - rows 고정이 아니라 scrollHeight 기반으로 늘리고, overflow는 숨긴다.
+   * - 페이지 전환/초기 렌더에서도 즉시 높이가 맞도록 ref + effect를 사용한다.
+   */
+  const textareaRefs = useRef({}); // code -> textarea element
+  const autoResize = (el) => {
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  };
+
   // 도메인 목록
   const domains = useMemo(() => {
     const set = new Set();
@@ -51,7 +64,9 @@ export default function StatusWritePanel({ checklistItems, onUpdated }) {
    *   여기의 filtered는 진행률 계산에 사용하지 않는다.
    */
   const filtered = useMemo(() => {
-    const needle = String(q || "").trim().toLowerCase();
+    const needle = String(q || "")
+      .trim()
+      .toLowerCase();
     return (checklistItems || [])
       .filter((x) => {
         if (!selectedDomain) return true;
@@ -59,14 +74,7 @@ export default function StatusWritePanel({ checklistItems, onUpdated }) {
       })
       .filter((x) => {
         if (!needle) return true;
-        const hay = [
-          x.type,
-          x.area,
-          x.domain,
-          x.code,
-          x.itemCode,
-          x.status,
-        ]
+        const hay = [x.type, x.area, x.domain, x.code, x.itemCode, x.status]
           .map((v) => String(v || "").toLowerCase())
           .join(" ");
         return hay.includes(needle);
@@ -106,6 +114,15 @@ export default function StatusWritePanel({ checklistItems, onUpdated }) {
     });
   }, [pageRows]);
 
+  // ✅ 페이지 전환/초기 렌더 시 textarea 높이 재계산
+  useEffect(() => {
+    for (const r of pageRows) {
+      const code = String(r.code || "").trim();
+      if (!code) continue;
+      autoResize(textareaRefs.current[code]);
+    }
+  }, [pageRows]);
+
   // domain 바뀌면 1페이지로
   useEffect(() => {
     setPage(1);
@@ -128,16 +145,23 @@ export default function StatusWritePanel({ checklistItems, onUpdated }) {
     <div className="space-y-4">
       {/* 상단 진행률 */}
       <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
-        <ProgressBar done={progress.done} total={progress.total} label="통제 이행 점검 진행률 (status 작성 기준)" />
+        <ProgressBar
+          done={progress.done}
+          total={progress.total}
+          label="통제 이행 점검 진행률 (status 작성 기준)"
+        />
         <div className="text-sm text-slate-600">
-          도메인(분야) 선택 → 각 통제 항목의 현황을 입력 → 저장 시 Checklist 시트의 <b>status</b> 컬럼에 반영됩니다.
+          도메인(분야) 선택 → 각 통제 항목의 현황을 입력 → 저장 시 Checklist 시트의{" "}
+          <b>status</b> 컬럼에 반영됩니다.
         </div>
       </div>
 
       {/* 필터 */}
       <div className="rounded-2xl border border-slate-200 bg-white p-4 flex flex-col lg:flex-row gap-3 lg:items-end">
         <div className="flex-1">
-          <div className="text-xs font-semibold text-slate-700 mb-1">분야(domain)</div>
+          <div className="text-xs font-semibold text-slate-700 mb-1">
+            분야(domain)
+          </div>
           <Select
             value={selectedDomain}
             onChange={(v) => setSelectedDomain(v)}
@@ -156,33 +180,11 @@ export default function StatusWritePanel({ checklistItems, onUpdated }) {
         </div>
       </div>
 
-      {/*
-        편집 테이블
-        - Table.jsx는 row가 button이라 textarea와 충돌 -> 직접 렌더
-        - ✅ 요청사항 반영
-          1) 진행률은 "도메인별"이 아니라 "전체 통제 갯수 대비"(progress done/total)로 계산
-          2) 유형/영역/분야/코드는 최대한 좁게(식별용)
-          3) 항목/현황(status)은 가장 중요한 작성 영역이므로 넓게
-
-        구현 포인트
-        - Tailwind arbitrary grid-template-columns 사용
-        - 작은 화면에서는 가로 스크롤(overflow-x-auto)로 깨짐 방지
-      */}
       <div className="rounded-2xl border border-slate-200 overflow-hidden bg-white">
         <div className="overflow-x-auto">
-          <div className="min-w-[980px]">
+          <div className="min-w-[1100px]">
             {/* header */}
-            <div className="grid grid-cols-[72px_96px_140px_90px_1fr_minmax(280px,420px)_96px] bg-slate-50 text-xs font-semibold text-slate-700">
-              {/*
-                컬럼 정의(왼→오)
-                1) 유형: 72px
-                2) 영역: 96px
-                3) 분야: 140px
-                4) 코드: 90px
-                5) 항목: 1fr (가장 넓게)
-                6) 현황(status): minmax(280px, 420px)
-                7) 저장: 96px
-              */}
+            <div className="grid grid-cols-[64px_88px_120px_86px_minmax(360px,1fr)_minmax(360px,1fr)_88px] bg-slate-50 text-xs font-semibold text-slate-700">
               <div className="px-2 py-3 text-center">유형</div>
               <div className="px-2 py-3 text-center">영역</div>
               <div className="px-2 py-3 text-center">분야</div>
@@ -200,9 +202,8 @@ export default function StatusWritePanel({ checklistItems, onUpdated }) {
                 return (
                   <div
                     key={code}
-                    className="grid grid-cols-[72px_96px_140px_90px_1fr_minmax(280px,420px)_96px] items-stretch"
+                    className="grid grid-cols-[64px_88px_120px_86px_minmax(360px,1fr)_minmax(360px,1fr)_88px] items-stretch"
                   >
-                    {/* 유형/영역/분야/코드: 식별용(짧게), 줄바꿈 방지 */}
                     <div className="px-2 py-3 text-xs text-slate-800 text-center whitespace-nowrap overflow-hidden text-ellipsis">
                       {r.type || "-"}
                     </div>
@@ -216,25 +217,30 @@ export default function StatusWritePanel({ checklistItems, onUpdated }) {
                       {code || "-"}
                     </div>
 
-                    {/* 항목: 가장 중요한 본문(넓게), 줄바꿈 허용 */}
                     <div className="px-3 py-3 text-sm text-slate-800 text-left whitespace-pre-wrap break-words">
                       {r.itemCode || "-"}
                     </div>
 
-                    {/* 현황(status): 작성 영역, 가독성을 위해 너비 확보 */}
                     <div className="px-3 py-2">
                       <textarea
+                        ref={(el) => {
+                          textareaRefs.current[code] = el;
+                          autoResize(el);
+                        }}
                         value={String(draft[code] ?? "")}
                         onChange={(e) =>
-                          setDraft((prev) => ({ ...prev, [code]: e.target.value }))
+                          setDraft((prev) => ({
+                            ...prev,
+                            [code]: e.target.value,
+                          }))
                         }
-                        rows={2}
-                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
+                        onInput={(e) => autoResize(e.currentTarget)}
+                        rows={1}
+                        className="w-full min-h-[44px] resize-none overflow-hidden rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
                         placeholder="운영현황/미흡사항/예외 등"
                       />
                     </div>
 
-                    {/* 저장: status가 있으면 완료(파랑)로 유지 */}
                     <div className="px-3 py-3 flex items-center justify-center">
                       <button
                         type="button"
@@ -244,7 +250,11 @@ export default function StatusWritePanel({ checklistItems, onUpdated }) {
                           done
                             ? "bg-blue-600 text-white hover:bg-blue-700"
                             : "bg-slate-900 text-white hover:bg-slate-800"
-                        } ${savingCode === code ? "opacity-60 cursor-not-allowed" : ""}`}
+                        } ${
+                          savingCode === code
+                            ? "opacity-60 cursor-not-allowed"
+                            : ""
+                        }`}
                       >
                         {savingCode === code ? "저장중" : done ? "완료" : "저장"}
                       </button>
@@ -275,7 +285,9 @@ export default function StatusWritePanel({ checklistItems, onUpdated }) {
                 type="button"
                 onClick={() => setPage(p)}
                 className={`w-9 h-9 rounded-xl border text-sm font-semibold ${
-                  active ? "bg-slate-900 text-white border-slate-900" : "bg-white border-slate-200 hover:bg-slate-50"
+                  active
+                    ? "bg-slate-900 text-white border-slate-900"
+                    : "bg-white border-slate-200 hover:bg-slate-50"
                 }`}
               >
                 {p}
