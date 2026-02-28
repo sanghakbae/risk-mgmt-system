@@ -330,7 +330,7 @@ export default function App() {
           {/* Left Sidebar */}
           <div className={`${sidebarCollapsed ? "w-0" : "w-[220px]"} transition-all overflow-hidden shrink-0`}>
             <div className="space-y-4">
-              <Card title="프로세스 단계" desc="왼쪽 단계는 그대로 따라가도록 설계" right={<Badge>Matrix {matrix}</Badge>}>
+              <Card title="프로세스" right={<Badge>Matrix {matrix}</Badge>}>
                 <div className="space-y-2">
                   {STEPS.map((s, idx) => {
                     const active = s.key === activeStep;
