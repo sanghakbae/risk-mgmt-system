@@ -38,7 +38,7 @@ import { updateFields } from "../lib/sheetsApi";
 function ProgressBar({ done, total, label }) {
   const pct = total > 0 ? Math.round((done / total) * 100) : 0;
   return (
-    <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4">
+    <div className="rounded-2xl border border-slate-200 bg-white p-5">
       <div className="flex items-center justify-between gap-3">
         <div className="text-sm font-semibold text-slate-900">{label}</div>
         <div className="text-xs text-slate-500">
