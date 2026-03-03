@@ -20,7 +20,8 @@ import Card, { Badge } from "./ui/Card";
 import Button from "./ui/Button";
 import Select from "./ui/Select";
 import { score, gradeFromScore } from "./utils/scoring";
-import { readSheet } from "./lib/sheetsApi";
+//import { readSheet } from "./lib/sheetsApi";
+import { supabase } from "./lib/supabaseClient";
 
 const STEPS = [
   { key: "dashboard", title: "대시보드", desc: "전체 현황 요약" },
@@ -124,42 +125,27 @@ export default function App() {
     }
 
     // 2) 최신 데이터 로드
+    // 2) 최신 데이터 로드 (Supabase)
     (async () => {
       try {
-        const data = await readSheet("Checklist");
-        if (!Array.isArray(data)) return;
+        const { data, error } = await supabase
+          .from("checklist")
+          .select("*") // 먼저 전체로 확인 (성공하면 필요한 컬럼만으로 줄여서 속도 최적화)
+          .order("code", { ascending: true });
 
-        const mapped = data
-          .map((r) => ({
-            type: String(r.type ?? "ISMS").trim(),
-            area: String(r.area ?? "").trim(),
-            domain: String(r.domain ?? "").trim(),
-            code: String(r.code ?? "").trim(),
-            itemCode: String(r.itemCode ?? "").trim(),
+        if (error) throw error;
 
-            status: String(r.status ?? "").trim(),
-            result: String(r.result ?? "").trim(),
-            result_detail: String(r.result_detail ?? "").trim(),
+        // ✅ 아래 "매핑"은 기존 readSheet 결과 구조에 맞춰 유지
+        //    (기존 코드에 data.map(...)이 이어질 텐데, 그걸 그대로 두면 됩니다)
+        //    단, itemCode를 쓰고 있었다면 Supabase는 itemcode(소문자)일 수 있으니 변환만 추가
+        const normalized = (data ?? []).map((r) => ({
+          ...r,
+          itemCode: r.itemCode ?? r.itemcode ?? "",   // ✅ 기존 UI가 itemCode를 기대하면 이 줄 필수
+          Guide: r.Guide ?? r.guide ?? r["Guide"] ?? "", // ✅ Guide 컬럼 사용 시
+        }));
 
-            impact: String(r.impact ?? "").trim(),
-            likelihood: String(r.likelihood ?? "").trim(),
-
-            treatment_strategy: String(r.treatment_strategy ?? "").trim(),
-            treatment_plan: String(r.treatment_plan ?? ""),
-            treatment_owner: String(r.treatment_owner ?? "").trim(),
-            treatment_due_date: String(r.treatment_due_date ?? "").trim(),
-            treatment_status: String(r.treatment_status ?? "").trim(),
-            accept_reason: String(r.accept_reason ?? ""),
-
-            residual_impact: String(r.residual_impact ?? "").trim(),
-            residual_likelihood: String(r.residual_likelihood ?? "").trim(),
-            residual_status: String(r.residual_status ?? "").trim(),
-            residual_detail: String(r.residual_detail ?? ""),
-          }))
-          .filter((x) => x.code); // ✅ code가 PK
-
-        setChecklistItems(mapped);
-        localStorage.setItem(CACHE_KEY, JSON.stringify(mapped));
+        setChecklistItems(normalized);
+        localStorage.setItem(CACHE_KEY, JSON.stringify(normalized));
       } catch (e) {
         console.error("Checklist load error:", e);
       }
