@@ -12,13 +12,11 @@ export default function LoginButton() {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          // ✅ 현재 사이트로 돌아오게
-          redirectTo: window.location.origin,
+          redirectTo: `${window.location.origin}/risk-mgmt-system/#/`,
         },
       });
 
       if (error) throw error;
-      // 여기서부터는 Google로 리다이렉트되므로 코드 실행이 끊기는게 정상
     } catch (e) {
       alert("로그인 실패: " + (e?.message || "unknown"));
       setBusy(false);
