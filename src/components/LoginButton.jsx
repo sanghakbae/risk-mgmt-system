@@ -9,10 +9,14 @@ export default function LoginButton() {
     try {
       setBusy(true);
 
+      // ✅ GitHub Pages는 origin만 쓰면 루트로 돌아가서 꼬임
+      const redirectTo = `${window.location.origin}/risk-mgmt-system/`;
+
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: `${window.location.origin}/risk-mgmt-system/#/`,
+          redirectTo,
+          queryParams: { prompt: "select_account" },
         },
       });
 

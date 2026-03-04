@@ -8,13 +8,13 @@ export default function LoginPage() {
     try {
       setLoading(true);
 
+      const redirectTo = `${window.location.origin}/risk-mgmt-system/`;
+
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: `${window.location.origin}/risk-mgmt-system/#/`,
-          queryParams: {
-            prompt: "select_account",
-          },
+          redirectTo,
+          queryParams: { prompt: "select_account" },
         },
       });
 
