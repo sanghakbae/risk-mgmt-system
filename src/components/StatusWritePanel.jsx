@@ -1,301 +1,476 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import Select from "../ui/Select";
-import { updateFields } from "../lib/sheetsApi";
+//import React, { useMemo, useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect, useRef } from "react";
+import { supabase } from "../lib/supabaseClient";
+import { updateChecklistByCode } from "../api/checklist";
+import Button from "../ui/Button";
 
-function ProgressBar({ done, total, label }) {
-  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
-  return (
-    <div className="space-y-1">
-      <div className="flex items-center justify-between text-xs text-slate-600">
-        <div className="font-semibold">{label}</div>
-        <div>
-          {done}/{total} ({pct}%)
-        </div>
-      </div>
-      <div className="h-2 w-full rounded-full bg-slate-100 overflow-hidden">
-        <div className="h-2 bg-slate-900" style={{ width: `${pct}%` }} />
-      </div>
-    </div>
-  );
+function safeStr(v) {
+  return v == null ? "" : String(v);
 }
 
-export default function StatusWritePanel({ checklistItems, onUpdated }) {
-  const [selectedDomain, setSelectedDomain] = useState("");
-  const [q, setQ] = useState("");
+function normalizeType(v) {
+  const s = safeStr(v).trim();
+  if (!s) return "";
+  const u = s.toUpperCase();
+  if (u.includes("ISO")) return "ISO27001";
+  if (u.includes("ISMS")) return "ISMS";
+  return s;
+}
+
+function sanitizePathSegment(s) {
+  return safeStr(s)
+    .trim()
+    .replace(/\./g, "_")
+    .replace(/[^a-zA-Z0-9_-]/g, "_");
+}
+
+function sanitizeFileName(name) {
+  const s = safeStr(name).trim();
+  return s.replace(/[^a-zA-Z0-9._-]/g, "_");
+}
+
+function clamp(n, min, max) {
+  return Math.max(min, Math.min(max, n));
+}
+
+export default function StatusWritePanel({ checklistItems = [], onUpdated }) {
+  const rows = useMemo(() => (Array.isArray(checklistItems) ? checklistItems : []), [checklistItems]);
+
+  // ✅ VulnIdentifyPanel 스타일: 상단 필터 상태
+  const [typeFilter, setTypeFilter] = useState("전체");
+  const [domainFilter, setDomainFilter] = useState("전체");
+  const [areaFilter, setAreaFilter] = useState("전체");
+  const [statusFilter, setStatusFilter] = useState("전체"); // 현황 입력 여부
+  const [keyword, setKeyword] = useState("");
+
+  // ✅ pagination
+  const pageSize = 3;
   const [page, setPage] = useState(1);
-  const PAGE_SIZE = 20;
 
-  const [draft, setDraft] = useState({}); // code -> status text
+  // code별 입력값/파일 상태 관리
+  const [draftByCode, setDraftByCode] = useState(() => ({}));
+  const [fileByCode, setFileByCode] = useState(() => ({}));
   const [savingCode, setSavingCode] = useState(null);
+  const [uploadingCode, setUploadingCode] = useState(null);
 
-  /**
-   * ✅ textarea 자동 높이 조절(가독성 개선)
-   * - 현황(status)은 길어질 수 있으므로, 입력값에 따라 높이를 자동으로 늘린다.
-   * - rows 고정이 아니라 scrollHeight 기반으로 늘리고, overflow는 숨긴다.
-   * - 페이지 전환/초기 렌더에서도 즉시 높이가 맞도록 ref + effect를 사용한다.
-   */
-  const textareaRefs = useRef({}); // code -> textarea element
-  const autoResize = (el) => {
+  const textareasRef = useRef({});
+
+  function autoResizeTextarea(el) {
     if (!el) return;
     el.style.height = "auto";
     el.style.height = `${el.scrollHeight}px`;
-  };
+  }
 
-  // 도메인 목록
-  const domains = useMemo(() => {
+  function setTextareaRef(code, el) {
+    if (!el) return;
+    // 코드별로 ref 저장 + 초기 높이 1회 적용
+    textareasRef.current[code] = el;
+    autoResizeTextarea(el);
+  }
+
+
+  function getDraft(code, row) {
+    const key = safeStr(code);
+    const d = draftByCode[key];
+    if (d) return d;
+    return { status: safeStr(row.status) };
+  }
+
+  function setDraft(code, patch) {
+    const key = safeStr(code);
+    setDraftByCode((prev) => ({
+      ...prev,
+      [key]: { ...(prev[key] || {}), ...patch },
+    }));
+  }
+
+  function setFile(code, file) {
+    const key = safeStr(code);
+    setFileByCode((prev) => ({ ...prev, [key]: file || null }));
+  }
+
+  // ✅ 필터 옵션(타입/도메인/영역)
+  const typeOptions = useMemo(() => {
     const set = new Set();
-    (checklistItems || []).forEach((x) => {
-      const d = String(x.domain || "").trim();
-      if (d) set.add(d);
-    });
-    return Array.from(set);
-  }, [checklistItems]);
-
-  // ✅ 메뉴 진입/데이터 로드 시 첫 도메인 자동 선택
-  useEffect(() => {
-    if (selectedDomain) return;
-    if (domains.length) setSelectedDomain(domains[0]);
-  }, [domains, selectedDomain]);
-
-  /**
-   * 선택 도메인 + 검색 필터
-   * - 화면에 보여줄 "행"을 결정하는 필터
-   * - 진행률(progress)은 "전체 통제" 기준으로 계산해야 하므로(요구사항)
-   *   여기의 filtered는 진행률 계산에 사용하지 않는다.
-   */
-  const filtered = useMemo(() => {
-    const needle = String(q || "")
-      .trim()
-      .toLowerCase();
-    return (checklistItems || [])
-      .filter((x) => {
-        if (!selectedDomain) return true;
-        return String(x.domain || "").trim() === selectedDomain;
-      })
-      .filter((x) => {
-        if (!needle) return true;
-        const hay = [x.type, x.area, x.domain, x.code, x.itemCode, x.status]
-          .map((v) => String(v || "").toLowerCase())
-          .join(" ");
-        return hay.includes(needle);
-      });
-  }, [checklistItems, selectedDomain, q]);
-
-  /**
-   * ✅ 진행률(중요): "전체 통제 갯수" 대비 status 작성률
-   * - 분야(domain)별 진행률이 아니라, 모든 통제 항목을 모수로 삼아야 한다.
-   * - 검색/페이지네이션/도메인 필터는 화면 표시를 위한 것이고, 진행률에는 영향 주지 않음.
-   * - 기준: Checklist 시트의 status 컬럼이 공백이 아닌 항목 수
-   */
-  const progress = useMemo(() => {
-    const all = checklistItems || [];
-    const total = all.length;
-    const done = all.filter((x) => String(x.status || "").trim() !== "").length;
-    return { done, total };
-  }, [checklistItems]);
-
-  // pagination
-  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const pageRows = useMemo(() => {
-    const start = (page - 1) * PAGE_SIZE;
-    return filtered.slice(start, start + PAGE_SIZE);
-  }, [filtered, page]);
-
-  // draft 초기화(현재 페이지의 status를 draft에 채움. 기존 draft 있으면 유지)
-  useEffect(() => {
-    setDraft((prev) => {
-      const next = { ...prev };
-      for (const r of pageRows) {
-        const code = String(r.code || "").trim();
-        if (!code) continue;
-        if (next[code] == null) next[code] = String(r.status || "");
-      }
-      return next;
-    });
-  }, [pageRows]);
-
-  // ✅ 페이지 전환/초기 렌더 시 textarea 높이 재계산
-  useEffect(() => {
-    for (const r of pageRows) {
-      const code = String(r.code || "").trim();
-      if (!code) continue;
-      autoResize(textareaRefs.current[code]);
+    for (const x of rows) {
+      const t = normalizeType(x.type);
+      if (t) set.add(t);
     }
-  }, [pageRows]);
+    return ["전체", ...Array.from(set).sort((a, b) => a.localeCompare(b))];
+  }, [rows]);
 
-  // domain 바뀌면 1페이지로
+  const domainOptions = useMemo(() => {
+    const set = new Set();
+    for (const x of rows) {
+      const d = safeStr(x.domain).trim();
+      if (d) set.add(d);
+    }
+    return ["전체", ...Array.from(set).sort((a, b) => a.localeCompare(b))];
+  }, [rows]);
+
+  const areaOptions = useMemo(() => {
+    const set = new Set();
+    for (const x of rows) {
+      const a = safeStr(x.area).trim();
+      if (a) set.add(a);
+    }
+    return ["전체", ...Array.from(set).sort((a, b) => a.localeCompare(b))];
+  }, [rows]);
+
+  // ✅ 필터 적용된 목록
+  const filteredRows = useMemo(() => {
+    const kw = safeStr(keyword).trim().toLowerCase();
+
+    return rows.filter((x) => {
+      // type
+      if (typeFilter !== "전체" && normalizeType(x.type) !== typeFilter) return false;
+
+      // domain
+      if (domainFilter !== "전체" && safeStr(x.domain).trim() !== domainFilter) return false;
+
+      // area
+      if (areaFilter !== "전체" && safeStr(x.area).trim() !== areaFilter) return false;
+
+      // status 입력 여부
+      const hasStatus = safeStr(x.status).trim().length > 0;
+      if (statusFilter === "입력됨" && !hasStatus) return false;
+      if (statusFilter === "미입력" && hasStatus) return false;
+
+      // keyword
+      if (kw) {
+        const hay = [
+          x.code,
+          x.itemCode,
+          x.itemcode,
+          x.domain,
+          x.area,
+          x.type,
+          x.status,
+          x.reason,
+          x.result_detail,
+        ]
+          .map((v) => safeStr(v).toLowerCase())
+          .join(" | ");
+        if (!hay.includes(kw)) return false;
+      }
+
+      return true;
+    });
+  }, [rows, typeFilter, domainFilter, areaFilter, statusFilter, keyword]);
+
+  // ✅ 페이지 수 계산 + 현재 페이지 보정
+  const totalPages = useMemo(() => {
+    const n = Math.ceil(filteredRows.length / pageSize);
+    return n <= 0 ? 1 : n;
+  }, [filteredRows.length]);
+
   useEffect(() => {
+    // 필터 바뀌면 1페이지로
     setPage(1);
-  }, [selectedDomain, q]);
+  }, [typeFilter, domainFilter, areaFilter, statusFilter, keyword]);
 
-  async function saveOne(code) {
-    const text = String(draft[code] ?? "");
+  useEffect(() => {
+    // filteredRows 줄어들어 page가 넘어가면 보정
+    setPage((p) => clamp(p, 1, totalPages));
+  }, [totalPages]);
+
+  const pageRows = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return filteredRows.slice(start, start + pageSize);
+  }, [filteredRows, page]);
+
+
+  const maxPageButtons = 10;
+
+  const pageNumbers = useMemo(() => {
+    const tp = totalPages || 1;
+    const cur = clamp(page, 1, tp);
+
+    if (tp <= maxPageButtons) {
+      return Array.from({ length: tp }, (_, i) => i + 1);
+    }
+
+    const half = Math.floor(maxPageButtons / 2); // 5
+    let start = cur - half;
+    let end = start + maxPageButtons - 1;
+
+    if (start < 1) {
+      start = 1;
+      end = maxPageButtons;
+    }
+    if (end > tp) {
+      end = tp;
+      start = tp - maxPageButtons + 1;
+    }
+
+    return Array.from({ length: end - start + 1 }, (_, i) => start + i);
+  }, [page, totalPages]);
+
+
+
+  async function uploadEvidenceIfAny(row) {
+    const code = safeStr(row.code);
+    const file = fileByCode[code];
+
+    if (!file) {
+      return safeStr(row.evidence_url || "");
+    }
+
+    const safeCode = sanitizePathSegment(code);
+    const safeName = sanitizeFileName(file.name);
+    const filePath = `${safeCode}/${Date.now()}_${safeName}`;
+
+    setUploadingCode(code);
+
+    const { error: uploadError } = await supabase.storage
+      .from("evidence")
+      .upload(filePath, file, {
+        upsert: true,
+        cacheControl: "3600",
+        contentType: file.type || "application/octet-stream",
+      });
+
+    if (uploadError) {
+      throw new Error("업로드 실패: " + uploadError.message);
+    }
+
+    const { data } = supabase.storage.from("evidence").getPublicUrl(filePath);
+    const url = data?.publicUrl || "";
+
+    if (!url) {
+      throw new Error("업로드는 성공했지만 public URL 생성 실패");
+    }
+
+    setFile(code, null);
+    return url;
+  }
+
+  async function handleSave(row) {
+    const code = safeStr(row.code);
     try {
       setSavingCode(code);
-      await updateFields("Checklist", code, { status: text });
-      if (typeof onUpdated === "function") onUpdated();
+
+      const draft = getDraft(code, row);
+      const statusValue = safeStr(draft.status).trim();
+
+      const evidenceUrl = await uploadEvidenceIfAny(row);
+
+      await updateChecklistByCode(code, {
+        status: statusValue === "" ? null : statusValue,
+        evidence_url: evidenceUrl === "" ? null : evidenceUrl,
+      });
+
+      onUpdated?.();
+      alert("저장 완료");
     } catch (e) {
-      alert("저장 실패: " + String(e.message || e));
+      alert(e?.message || "저장 실패");
     } finally {
       setSavingCode(null);
+      setUploadingCode(null);
     }
   }
 
   return (
-    <div className="space-y-4">
-      {/* 상단 진행률 */}
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
-        <ProgressBar
-          done={progress.done}
-          total={progress.total}
-          label="통제 이행 점검 진행률 (status 작성 기준)"
-        />
-        <div className="text-sm text-slate-600">
-          도메인(분야) 선택 → 각 통제 항목의 현황을 입력 → 저장 시 Checklist 시트의{" "}
-          <b>status</b> 컬럼에 반영됩니다.
-        </div>
-      </div>
+    <div className="space-y-4 w-full max-w-none">
+      {/* ✅ 상단 필터(= VulnIdentifyPanel 느낌으로) */}
+      <div className="rounded-2xl border border-slate-200 bg-white p-4">
+        <div className="flex items-center gap-2 flex-wrap">
+          <select
+            value={typeFilter}
+            onChange={(e) => setTypeFilter(e.target.value)}
+            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
+          >
+            {typeOptions.map((t) => (
+              <option key={t} value={t}>
+                {t === "전체" ? "유형(전체)" : t}
+              </option>
+            ))}
+          </select>
 
-      {/* 필터 */}
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 flex flex-col lg:flex-row gap-3 lg:items-end">
-        <div className="flex-1">
-          <div className="text-xs font-semibold text-slate-700 mb-1">
-            분야(domain)
-          </div>
-          <Select
-            value={selectedDomain}
-            onChange={(v) => setSelectedDomain(v)}
-            options={domains.map((d) => ({ value: d, label: d }))}
-          />
-        </div>
+          <select
+            value={domainFilter}
+            onChange={(e) => setDomainFilter(e.target.value)}
+            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
+          >
+            {domainOptions.map((d) => (
+              <option key={d} value={d}>
+                {d === "전체" ? "도메인(전체)" : d}
+              </option>
+            ))}
+          </select>
 
-        <div className="flex-1">
-          <div className="text-xs font-semibold text-slate-700 mb-1">검색</div>
+          <select
+            value={areaFilter}
+            onChange={(e) => setAreaFilter(e.target.value)}
+            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
+          >
+            {areaOptions.map((a) => (
+              <option key={a} value={a}>
+                {a === "전체" ? "영역(전체)" : a}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
+          >
+            <option value="전체">현황(전체)</option>
+            <option value="입력됨">현황(입력됨)</option>
+            <option value="미입력">현황(미입력)</option>
+          </select>
+
           <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
-            placeholder="유형/영역/분야/코드/항목/status 검색"
+            value={keyword}
+            onChange={(e) => setKeyword(e.target.value)}
+            className="min-w-[240px] flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
+            placeholder="검색(코드/항목/현황/도메인/영역 등)"
           />
-        </div>
-      </div>
 
-      <div className="rounded-2xl border border-slate-200 overflow-hidden bg-white">
-        <div className="overflow-x-auto">
-          <div className="min-w-[1100px]">
-            {/* header */}
-            <div className="grid grid-cols-[64px_88px_120px_86px_minmax(360px,1fr)_minmax(360px,1fr)_88px] bg-slate-50 text-xs font-semibold text-slate-700">
-              <div className="px-2 py-3 text-center">유형</div>
-              <div className="px-2 py-3 text-center">영역</div>
-              <div className="px-2 py-3 text-center">분야</div>
-              <div className="px-2 py-3 text-center">코드</div>
-              <div className="px-3 py-3 text-center">항목</div>
-              <div className="px-3 py-3 text-center">현황(status)</div>
-              <div className="px-3 py-3 text-center">저장</div>
-            </div>
-
-            {/* rows */}
-            <div className="divide-y">
-              {pageRows.map((r) => {
-                const code = String(r.code || "").trim();
-                const done = String(r.status || "").trim() !== "";
-                return (
-                  <div
-                    key={code}
-                    className="grid grid-cols-[64px_88px_120px_86px_minmax(360px,1fr)_minmax(360px,1fr)_88px] items-stretch"
-                  >
-                    <div className="px-2 py-3 text-xs text-slate-800 text-center whitespace-nowrap overflow-hidden text-ellipsis">
-                      {r.type || "-"}
-                    </div>
-                    <div className="px-2 py-3 text-xs text-slate-800 text-center whitespace-nowrap overflow-hidden text-ellipsis">
-                      {r.area || "-"}
-                    </div>
-                    <div className="px-2 py-3 text-xs text-slate-800 text-center whitespace-nowrap overflow-hidden text-ellipsis">
-                      {r.domain || "-"}
-                    </div>
-                    <div className="px-2 py-3 text-xs text-slate-800 text-center whitespace-nowrap overflow-hidden text-ellipsis">
-                      {code || "-"}
-                    </div>
-
-                    <div className="px-3 py-3 text-sm text-slate-800 text-left whitespace-pre-wrap break-words">
-                      {r.itemCode || "-"}
-                    </div>
-
-                    <div className="px-3 py-2">
-                      <textarea
-                        ref={(el) => {
-                          textareaRefs.current[code] = el;
-                          autoResize(el);
-                        }}
-                        value={String(draft[code] ?? "")}
-                        onChange={(e) =>
-                          setDraft((prev) => ({
-                            ...prev,
-                            [code]: e.target.value,
-                          }))
-                        }
-                        onInput={(e) => autoResize(e.currentTarget)}
-                        rows={1}
-                        className="w-full min-h-[44px] resize-none overflow-hidden rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
-                        placeholder="운영현황/미흡사항/예외 등"
-                      />
-                    </div>
-
-                    <div className="px-3 py-3 flex items-center justify-center">
-                      <button
-                        type="button"
-                        onClick={() => saveOne(code)}
-                        disabled={savingCode === code}
-                        className={`rounded-xl px-3 py-2 text-sm font-semibold transition ${
-                          done
-                            ? "bg-blue-600 text-white hover:bg-blue-700"
-                            : "bg-slate-900 text-white hover:bg-slate-800"
-                        } ${
-                          savingCode === code
-                            ? "opacity-60 cursor-not-allowed"
-                            : ""
-                        }`}
-                      >
-                        {savingCode === code ? "저장중" : done ? "완료" : "저장"}
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-
-              {pageRows.length === 0 ? (
-                <div className="px-4 py-10 text-sm text-slate-500 text-center">
-                  데이터가 없습니다.
-                </div>
-              ) : null}
-            </div>
+          <div className="text-sm text-slate-600 ml-auto">
+            표시 {filteredRows.length}건 · {page}/{totalPages} 페이지
           </div>
         </div>
       </div>
 
-      {/* 페이지네이션 */}
-      {pageCount > 1 ? (
-        <div className="flex items-center justify-center gap-2">
-          {Array.from({ length: pageCount }).map((_, i) => {
-            const p = i + 1;
-            const active = p === page;
-            return (
-              <button
-                key={p}
-                type="button"
-                onClick={() => setPage(p)}
-                className={`w-9 h-9 rounded-xl border text-sm font-semibold ${
-                  active
-                    ? "bg-slate-900 text-white border-slate-900"
-                    : "bg-white border-slate-200 hover:bg-slate-50"
-                }`}
-              >
-                {p}
-              </button>
-            );
-          })}
+      {/* ✅ 목록: 최대 3개(pageSize=3) */}
+      {pageRows.map((row) => {
+        const code = safeStr(row.code);
+        const title = `[${code}] ${safeStr(row.itemCode)}`;
+
+        const draft = getDraft(code, row);
+        const selectedFile = fileByCode[code];
+        const busy = savingCode === code || uploadingCode === code;
+
+        return (
+          <div key={code} className="rounded-2xl border border-slate-200 bg-white p-5 space-y-4">
+            <div className="text-sm font-semibold text-slate-900 whitespace-pre-wrap">{title}</div>
+
+            <div className="space-y-1">
+              <div className="text-xs font-semibold text-slate-700">현황</div>
+                <textarea
+                  ref={(el) => setTextareaRef(code, el)}
+                  value={draft.status}
+                  onChange={(e) => {
+                    setDraft(code, { status: e.target.value });
+                    autoResizeTextarea(e.target);
+                  }}
+                  rows={3}
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200 resize-none overflow-hidden"
+                  placeholder="통제 이행 현황을 입력하세요"
+                />
+            </div>
+
+            <div className="space-y-2">
+              <div className="text-xs font-semibold text-slate-700">증적 업로드</div>
+
+              <div className="flex items-center gap-3 flex-wrap">
+                <input
+                  type="file"
+                  onChange={(e) => setFile(code, e.target.files?.[0] || null)}
+                  className="text-sm"
+                />
+
+                <div className="text-xs text-slate-500">
+                  {selectedFile ? `선택됨: ${selectedFile.name}` : "선택된 파일 없음"}
+                </div>
+
+                {row.evidence_url ? (
+                  <a
+                    href={row.evidence_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-blue-600 underline"
+                  >
+                    업로드된 증적 보기
+                  </a>
+                ) : null}
+
+                <div className="ml-auto">
+                  <Button onClick={() => handleSave(row)} disabled={busy}>
+                    {busy ? "처리 중..." : "저장"}
+                  </Button>
+                </div>
+              </div>
+
+              <div className="text-xs text-slate-400">
+                * 파일을 선택한 뒤 <b>저장</b>을 누르면 업로드 + 링크 저장까지 함께 처리됩니다.
+              </div>
+            </div>
+          </div>
+        );
+      })}
+
+      {/* ✅ 페이지 번호(맨 밑) */}
+      <div className="rounded-2xl border border-slate-200 bg-white p-4">
+        <div className="flex items-center justify-center gap-2 flex-wrap">
+          <Button
+            variant="outline"
+            onClick={() => setPage((p) => clamp(p - 1, 1, totalPages))}
+            disabled={page <= 1}
+          >
+            이전
+          </Button>
+
+        {/* 첫 페이지/생략 */}
+        {totalPages > 10 && pageNumbers[0] > 1 ? (
+          <>
+            <button
+              onClick={() => setPage(1)}
+              className="h-9 min-w-[36px] px-3 rounded-xl border text-sm font-semibold bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+            >
+              1
+            </button>
+            <span className="text-slate-400 px-1">…</span>
+          </>
+        ) : null}
+
+        {/* ✅ 최대 10개만 */}
+        {pageNumbers.map((p) => {
+          const active = p === page;
+          return (
+            <button
+              key={p}
+              onClick={() => setPage(p)}
+              className={[
+                "h-9 min-w-[36px] px-3 rounded-xl border text-sm font-semibold",
+                active
+                  ? "bg-slate-900 text-white border-slate-900"
+                  : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50",
+              ].join(" ")}
+            >
+              {p}
+            </button>
+          );
+        })}
+
+        {/* 마지막 페이지/생략 */}
+        {totalPages > 10 && pageNumbers[pageNumbers.length - 1] < totalPages ? (
+          <>
+            <span className="text-slate-400 px-1">…</span>
+            <button
+              onClick={() => setPage(totalPages)}
+              className="h-9 min-w-[36px] px-3 rounded-xl border text-sm font-semibold bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+            >
+              {totalPages}
+            </button>
+          </>
+        ) : null}
+
+          <Button
+            variant="outline"
+            onClick={() => setPage((p) => clamp(p + 1, 1, totalPages))}
+            disabled={page >= totalPages}
+          >
+            다음
+          </Button>
         </div>
-      ) : null}
+
+        <div className="mt-2 text-center text-xs text-slate-500">
+          총 {filteredRows.length}건 · 페이지당 {pageSize}건
+        </div>
+      </div>
     </div>
   );
 }

@@ -1,149 +1,260 @@
+// src/App.jsx
 import React, { useMemo, useState, useEffect } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import {
+  LayoutDashboard,
+  ListChecks,
+  ClipboardCheck,
+  ShieldAlert,
+  Gauge,
+  Wrench,
+  ShieldCheck,
+  FileText,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
 
-import AssetsPanel from "./components/AssetsPanel";
+import DashboardPanel from "./components/DashboardPanel";
 import ChecklistPanel from "./components/ChecklistPanel";
 import StatusWritePanel from "./components/StatusWritePanel";
 import VulnIdentifyPanel from "./components/VulnIdentifyPanel";
-import ScenarioPanel from "./components/ScenarioPanel";
-import AnalysisPanel from "./components/AnalysisPanel";
-import AcceptancePanel from "./components/AcceptancePanel";
-import TreatmentPanel from "./components/TreatmentPanel";
-import ResidualPanel from "./components/ResidualPanel";
-import ApprovePanel from "./components/ApprovePanel";
 import RiskEvaluatePanel from "./components/RiskEvaluatePanel";
 import RiskTreatmentPanel from "./components/RiskTreatmentPanel";
 import ResidualRiskPanel from "./components/ResidualRiskPanel";
-import DashboardPanel from "./components/DashboardPanel";
+import ApprovePanel from "./components/ApprovePanel";
 
-import Card, { Badge } from "./ui/Card";
 import Button from "./ui/Button";
-import Select from "./ui/Select";
-import { score, gradeFromScore } from "./utils/scoring";
-//import { readSheet } from "./lib/sheetsApi";
+import { Badge } from "./ui/Card";
 import { supabase } from "./lib/supabaseClient";
+import LoginButton from "./components/LoginButton";
 
 const STEPS = [
-  { key: "dashboard", title: "대시보드", desc: "전체 현황 요약" },
-    { key: "checklist", title: "통제 항목 관리", desc: "통제 기준 및 항목 정의/관리" },
-  { key: "status", title: "통제 이행 점검", desc: "통제 항목별 운영 현황 기록" },
-  { key: "vuln", title: "취약 도출", desc: "이행 미흡 항목 기반 취약 식별" },
-  { key: "analysis", title: "위험 평가", desc: "위험도 산정 및 허용 기준 비교" },
-  { key: "treatment", title: "위험 처리", desc: "위험 대응 전략 수립 및 조치" },
-  { key: "residual", title: "잔여 위험 평가", desc: "조치 후 잔여 위험 재평가" },
-  { key: "approve", title: "승인 및 보고", desc: "최종 승인 및 보고서 출력" },
+  { key: "dashboard", title: "Analytics", desc: "전체 현황 요약", icon: <LayoutDashboard className="w-4 h-4" /> },
+  { key: "checklist", title: "Checklist", desc: "통제 항목 정의/관리", icon: <ListChecks className="w-4 h-4" /> },
+  { key: "status", title: "Status", desc: "통제 이행 현황 기록", icon: <ClipboardCheck className="w-4 h-4" /> },
+  { key: "vuln", title: "Vulnerabilities", desc: "취약 식별", icon: <ShieldAlert className="w-4 h-4" /> },
+  { key: "risk_evaluate", title: "Risk Eval", desc: "위험도 산정", icon: <Gauge className="w-4 h-4" /> },
+  { key: "risk_treatment", title: "Treatment", desc: "위험 대응/조치", icon: <Wrench className="w-4 h-4" /> },
+  { key: "residual", title: "Residual", desc: "잔여 위험 재평가", icon: <ShieldCheck className="w-4 h-4" /> },
+  { key: "approve", title: "Report", desc: "승인/보고서", icon: <FileText className="w-4 h-4" /> },
 ];
 
-function MiniList({ title, items, empty }) {
+function normalizeChecklistRows(rows) {
+  return (rows ?? []).map((r) => ({
+    ...r,
+    itemCode: r.itemCode ?? r.itemcode ?? "",
+    Guide: r.Guide ?? r.guide ?? r["Guide"] ?? "",
+  }));
+}
+
+function LoginGate({ onSignedIn }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4">
-      <div className="text-sm font-semibold">{title}</div>
-      <div className="mt-3 space-y-2">
-        {items.length ? (
-          items.map((x) => (
-            <div key={x.id} className="rounded-xl border border-slate-200 px-3 py-2 text-sm">
-              <div className="font-semibold">{x.id}</div>
-              <div className="text-xs text-slate-500 mt-0.5">{x.sub}</div>
-            </div>
-          ))
-        ) : (
-          <div className="text-sm text-slate-500">{empty}</div>
-        )}
+    <div className="min-h-screen bg-slate-50 flex items-center justify-center px-4">
+      <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white shadow-sm p-6 space-y-4">
+        <div>
+          <div className="text-lg font-bold text-slate-900">로그인이 필요합니다</div>
+          <div className="text-sm text-slate-500 mt-1">muhayu.com 계정만 허용</div>
+        </div>
+        <div className="pt-2">
+          <LoginButton onSignedIn={onSignedIn} />
+        </div>
       </div>
     </div>
   );
 }
 
-function autoImpactLikelihoodFromStatus(result) {
-  if (result === "부적합") return { impact: 4, likelihood: 4 };
-  if (result === "부분적합") return { impact: 3, likelihood: 3 };
-  return { impact: 3, likelihood: 3 };
+function TopBar({ title, breadcrumb, right }) {
+  return (
+    <div className="flex items-center justify-between gap-4 py-4">
+      <div className="min-w-0">
+        <div className="text-xs text-slate-500 truncate">{breadcrumb}</div>
+        <div className="text-2xl font-bold text-slate-900 truncate">{title}</div>
+      </div>
+      <div className="shrink-0 flex items-center gap-2">{right}</div>
+    </div>
+  );
 }
 
-function applyResidualByTreatment(baseImpact, baseLikelihood, treatment) {
-  const clamp = (n) => Math.min(5, Math.max(1, n));
-  const map = {
-    Mitigate: { di: -1, dl: -1 },
-    Transfer: { di: 0, dl: -1 },
-    Avoid: { di: -2, dl: 0 },
-    Accept: { di: 0, dl: 0 },
-  };
-  const adj = map[treatment] ?? map.Mitigate;
-  return {
-    residualImpact: clamp(baseImpact + adj.di),
-    residualLikelihood: clamp(baseLikelihood + adj.dl),
-  };
+function Sidebar({ collapsed, activeKey, onSelect, onToggle }) {
+  return (
+    <div
+      className={[
+        "h-screen sticky top-0",
+        "border-r border-slate-200 bg-white",
+        // ✅ 접힘 폭 축소 (72px → 56px)
+        collapsed ? "w-[56px]" : "w-[260px]",
+        "transition-all",
+      ].join(" ")}
+    >
+      <div className="h-full flex flex-col">
+        {/* brand */}
+        <div
+          className={[
+            "py-4 flex items-center justify-between gap-2 border-b border-slate-200",
+            // ✅ 접힘이면 padding 줄이고 가운데 느낌
+            collapsed ? "px-2" : "px-4",
+          ].join(" ")}
+        >
+          <div
+            className={[
+              "flex items-center gap-2 min-w-0",
+              // ✅ 접힘이면 브랜드 영역 자체를 가운데로(로고 숨김이라 빈공간 방지)
+              collapsed ? "hidden" : "",
+            ].join(" ")}
+          >
+            {/* ✅ 접힘이면 R 안보이게 */}
+            {!collapsed ? (
+              <div className="w-9 h-9 rounded-xl bg-slate-900 text-white flex items-center justify-center font-bold">
+                R
+              </div>
+            ) : null}
+
+            {!collapsed ? (
+              <div className="min-w-0">
+                <div className="text-sm font-semibold text-slate-900 truncate">
+                  위험평가 시스템
+                </div>
+              </div>
+            ) : null}
+          </div>
+
+          {/* 토글 버튼: 접힘/펼침 모두 보이게 */}
+          <button
+            type="button"
+            onClick={onToggle}
+            className="w-8 h-8 rounded-lg border border-slate-200 hover:bg-slate-50 flex items-center justify-center"
+            title={collapsed ? "펼치기" : "접기"}
+          >
+            {collapsed ? (
+              <ChevronRight className="w-4 h-4" />
+            ) : (
+              <ChevronLeft className="w-4 h-4" />
+            )}
+          </button>
+        </div>
+
+        {/* nav */}
+        <div className={collapsed ? "px-1 py-3 flex-1 overflow-auto" : "px-2 py-3 flex-1 overflow-auto"}>
+          <div className="text-[11px] text-slate-500 px-3 mb-2">
+            {collapsed ? "" : "General"}
+          </div>
+
+          <div className="space-y-1">
+            {STEPS.map((s) => {
+              const active = s.key === activeKey;
+              return (
+                <button
+                  key={s.key}
+                  type="button"
+                  onClick={() => onSelect(s.key)}
+                  className={[
+                    "w-full flex items-center rounded-xl",
+                    collapsed
+                      ? "justify-center px-2 py-2"
+                      : "gap-3 px-3 py-2",
+                    active ? "bg-slate-900 text-white" : "text-slate-700 hover:bg-slate-50",
+                  ].join(" ")}
+                  // ✅ 접힘일 때도 툴팁으로 제목 보이게
+                  title={s.title}
+                >
+                  <span className={active ? "text-white" : "text-slate-500"}>{s.icon}</span>
+                  {!collapsed ? <span className="text-sm font-semibold truncate">{s.title}</span> : null}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* footer */}
+        <div className="p-3 border-t border-slate-200">
+          <div className={collapsed ? "hidden" : "text-xs text-slate-500"}>
+            UI: Analytics Shell
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function App() {
+  // Auth
+  const [session, setSession] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+
+  function enforceDomain(s) {
+    const email = s?.user?.email ?? "";
+    if (s && !email.endsWith("@muhayu.com")) {
+      setSession(null);
+      supabase.auth.signOut();
+      alert("muhayu.com 계정만 허용됩니다.");
+      return false;
+    }
+    return true;
+  }
+
+  useEffect(() => {
+    let mounted = true;
+
+    supabase.auth
+      .getSession()
+      .then(({ data, error }) => {
+        if (!mounted) return;
+        if (error) console.error("getSession error:", error);
+
+        const s = data?.session ?? null;
+        const ok = enforceDomain(s);
+        setSession(ok ? s : null);
+        setAuthLoading(false);
+      })
+      .catch((e) => {
+        if (!mounted) return;
+        console.error("getSession catch:", e);
+        setSession(null);
+        setAuthLoading(false);
+      });
+
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      if (!mounted) return;
+      const ok = enforceDomain(newSession);
+      setSession(ok ? (newSession ?? null) : null);
+      setAuthLoading(false);
+    });
+
+    return () => {
+      mounted = false;
+      sub?.subscription?.unsubscribe?.();
+    };
+  }, []);
+
+  // App state
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [activeStep, setActiveStep] = useState("dashboard");
+
+  const [checklistItems, setChecklistItems] = useState([]);
   const [checklistReloadKey, setChecklistReloadKey] = useState(0);
 
-  const [matrix, setMatrix] = useState("5x5");
-  const bound = matrix === "3x3" ? 3 : 5;
-  const [acceptThreshold, setAcceptThreshold] = useState(7);
+  // ApprovePanel 호환
+  const [risks, setRisks] = useState([]);
+  function approveAll() {
+    setRisks((prev) => prev.map((r) => ({ ...r, status: "Approved" })));
+  }
 
-  const [assets, setAssets] = useState([
-    {
-      id: "SVR-001",
-      assetCode: "SVR-001",
-      hostname: "db-prd-01",
-      ipAddress: "10.0.0.10",
-      type: "DBMS",
-      purpose: "운영 DB",
-      location: "KT-IDC",
-      dept: "Infra",
-      owner: "Infra",
-      admin: "SecOps",
-      confidentiality: 3,
-      integrity: 3,
-      availability: 3,
-      criticality: 9,
-      status: "Active",
-    },
-  ]);
-
-  // ✅ 단일 진실원천: Checklist 시트
-  const [checklistItems, setChecklistItems] = useState([]);
-
-  // ✅ 어느 메뉴든 동일하게 "시트→동일 데이터"를 보게 하기:
-  // - 캐시 즉시 표시
-  // - 백그라운드 최신 갱신
-  // - checklistReloadKey 변화 시 무조건 재조회
+  // Checklist Load
   useEffect(() => {
     const CACHE_KEY = "checklist_cache_v1";
 
-    // 1) 캐시 즉시 표시
     try {
       const cached = JSON.parse(localStorage.getItem(CACHE_KEY) || "null");
-      if (Array.isArray(cached) && cached.length) {
-        setChecklistItems(cached);
-      }
+      if (Array.isArray(cached) && cached.length) setChecklistItems(cached);
     } catch (e) {
       console.warn("cache parse error", e);
     }
 
-    // 2) 최신 데이터 로드
-    // 2) 최신 데이터 로드 (Supabase)
     (async () => {
       try {
-        const { data, error } = await supabase
-          .from("checklist")
-          .select("*") // 먼저 전체로 확인 (성공하면 필요한 컬럼만으로 줄여서 속도 최적화)
-          .order("code", { ascending: true });
-
+        const { data, error } = await supabase.from("checklist").select("*").order("code", { ascending: true });
         if (error) throw error;
 
-        // ✅ 아래 "매핑"은 기존 readSheet 결과 구조에 맞춰 유지
-        //    (기존 코드에 data.map(...)이 이어질 텐데, 그걸 그대로 두면 됩니다)
-        //    단, itemCode를 쓰고 있었다면 Supabase는 itemcode(소문자)일 수 있으니 변환만 추가
-        const normalized = (data ?? []).map((r) => ({
-          ...r,
-          itemCode: r.itemCode ?? r.itemcode ?? "",   // ✅ 기존 UI가 itemCode를 기대하면 이 줄 필수
-          Guide: r.Guide ?? r.guide ?? r["Guide"] ?? "", // ✅ Guide 컬럼 사용 시
-        }));
-
+        const normalized = normalizeChecklistRows(data);
         setChecklistItems(normalized);
         localStorage.setItem(CACHE_KEY, JSON.stringify(normalized));
       } catch (e) {
@@ -152,228 +263,62 @@ export default function App() {
     })();
   }, [checklistReloadKey]);
 
-  // (아래 legacy 영역은 지금 UI에서 쓰지 않지만 남겨둠)
-  const [assessments, setAssessments] = useState([
-    {
-      id: "AS-001",
-      checklistItemId: "1.1.1.1",
-      result: "부적합",
-      date: "2026-02-26",
-      riskGenerated: false,
-      evidence: "",
-      notes: "",
-    },
-  ]);
-  const [selectedAssessmentId, setSelectedAssessmentId] = useState("AS-001");
-  const [vulnerabilities, setVulnerabilities] = useState([]);
-  const [risks, setRisks] = useState([]);
-  const [selectedRiskId, setSelectedRiskId] = useState(null);
+  const activeMeta = useMemo(() => STEPS.find((s) => s.key === activeStep), [activeStep]);
 
-  const selectedAssessment = useMemo(
-    () => assessments.find((a) => a.id === selectedAssessmentId) ?? null,
-    [assessments, selectedAssessmentId]
-  );
-
-  const selectedChecklistItem = useMemo(
-    () => checklistItems.find((i) => i.id === selectedAssessment?.checklistItemId) ?? null,
-    [checklistItems, selectedAssessment]
-  );
-
-  const selectedRisk = useMemo(() => risks.find((r) => r.id === selectedRiskId) ?? null, [risks, selectedRiskId]);
-
-  const suggestedScenario = useMemo(() => {
-    if (!selectedAssessment || !selectedChecklistItem) return "";
-    const itemLabel = `${selectedChecklistItem.detailCode ?? selectedChecklistItem.id} ${selectedChecklistItem.itemTitle ?? ""}`.trim();
-    return `체크리스트 항목(${itemLabel})이(가) '${selectedAssessment.result}' 상태로 확인되어, 통제가 미흡할 경우 위협이 악용되어 정보 유출/서비스 중단/컴플라이언스 위반 등의 사고로 이어질 수 있다.`;
-  }, [selectedAssessment, selectedChecklistItem]);
-
-  const [scenarioText, setScenarioText] = useState("");
-  const canGenerate = Boolean(selectedAssessment && selectedChecklistItem);
-
-  function onChangeAssessmentResult(id, result) {
-    setAssessments((prev) => prev.map((a) => (a.id === id ? { ...a, result } : a)));
+  // Auth gate render
+  if (authLoading) {
+    return <div className="min-h-screen flex items-center justify-center text-slate-600">로그인 상태 확인 중...</div>;
+  }
+  if (!session) {
+    return <LoginGate onSignedIn={() => setChecklistReloadKey((k) => k + 1)} />;
   }
 
-  const autoIL = useMemo(() => {
-    if (!selectedAssessment) return { impact: 3, likelihood: 3 };
-    const base = autoImpactLikelihoodFromStatus(selectedAssessment.result);
-    return { impact: Math.min(bound, base.impact), likelihood: Math.min(bound, base.likelihood) };
-  }, [selectedAssessment, bound]);
+  // Right top controls
+  const topRight = (
+    <>
+      <div className="hidden md:flex items-center gap-2">
+        <div className="text-xs text-slate-500">LAST 30 DAYS</div>
+        <select className="text-xs rounded-xl border border-slate-200 bg-white px-3 py-2">
+          <option>최근 30일</option>
+          <option>최근 7일</option>
+          <option>이번 달</option>
+        </select>
+      </div>
 
-  const computedScore = score(autoIL.impact, autoIL.likelihood);
-  const grade = gradeFromScore(computedScore);
-  const acceptable = computedScore <= acceptThreshold;
-
-  function generateRisk() {
-    if (!canGenerate) return;
-    const vulnerable = selectedAssessment.result === "부분적합" || selectedAssessment.result === "부적합";
-    if (!vulnerable) return;
-
-    const text = (scenarioText || suggestedScenario).trim();
-    if (!text) return;
-
-    const riskId = `R-${String(risks.length + 1).padStart(3, "0")}`;
-    const itemLabel = `${selectedChecklistItem.detailCode ?? selectedChecklistItem.id}`;
-    const itemTitle = `${selectedChecklistItem.itemTitle ?? ""}`;
-
-    const r = {
-      id: riskId,
-      assessmentId: selectedAssessment.id,
-      asset: itemLabel,
-      itemTitle,
-      scenario: text,
-      impact: autoIL.impact,
-      likelihood: autoIL.likelihood,
-      score: score(autoIL.impact, autoIL.likelihood),
-      grade: gradeFromScore(score(autoIL.impact, autoIL.likelihood)).g,
-      status: "Generated",
-      treatment: "Mitigate",
-      residualStatus: "Pending",
-    };
-
-    const residual = applyResidualByTreatment(r.impact, r.likelihood, r.treatment);
-    r.residualImpact = residual.residualImpact;
-    r.residualLikelihood = residual.residualLikelihood;
-    r.residualScore = score(r.residualImpact, r.residualLikelihood);
-    r.residualGrade = gradeFromScore(r.residualScore).g;
-
-    setRisks((prev) => [r, ...prev]);
-    setSelectedRiskId(riskId);
-    setAssessments((prev) => prev.map((x) => (x.id === selectedAssessment.id ? { ...x, riskGenerated: true } : x)));
-    setScenarioText("");
-    setActiveStep("analysis");
-  }
-
-  function assessRisk() {
-    if (!selectedRisk) return;
-    setRisks((prev) =>
-      prev.map((r) =>
-        r.id === selectedRisk.id
-          ? { ...r, score: score(r.impact, r.likelihood), grade: gradeFromScore(score(r.impact, r.likelihood)).g, status: "Assessed" }
-          : r
-      )
-    );
-  }
-
-  function approveAll() {
-    setRisks((prev) => prev.map((r) => ({ ...r, status: "Approved" })));
-  }
-
-  function setRisksWithResidual(updater) {
-    setRisks((prev) => {
-      const next = typeof updater === "function" ? updater(prev) : updater;
-      return next.map((r) => {
-        const baseI = Math.min(bound, Math.max(1, r.impact ?? 3));
-        const baseL = Math.min(bound, Math.max(1, r.likelihood ?? 3));
-        const res = applyResidualByTreatment(baseI, baseL, r.treatment ?? "Mitigate");
-        const residualImpact = Math.min(bound, res.residualImpact);
-        const residualLikelihood = Math.min(bound, res.residualLikelihood);
-        const residualScore = score(residualImpact, residualLikelihood);
-        const residualGrade = gradeFromScore(residualScore).g;
-        return { ...r, residualImpact, residualLikelihood, residualScore, residualGrade };
-      });
-    });
-  }
-
-  const doneCounts = useMemo(() => {
-    const total = risks.length;
-    const mitigated = risks.filter((r) => r.treatment === "Mitigate").length;
-    const vh = risks.filter((r) => r.grade === "VH").length;
-    const ml = risks.filter((r) => r.grade === "M" || r.grade === "L").length;
-    return { total, mitigated, vh, ml };
-  }, [risks]);
-
-  const headerRight = (
-    <div className="flex items-center gap-2 flex-wrap justify-end">
       <Badge variant="ok">Local MVP</Badge>
-      <Badge variant="warn">Accept ≤ {acceptThreshold}</Badge>
+
       <Button
         variant="outline"
-        onClick={() => setSidebarCollapsed((v) => !v)}
-        iconLeft={sidebarCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
+        onClick={async () => {
+          await supabase.auth.signOut();
+          setSession(null);
+        }}
       >
-        좌측 {sidebarCollapsed ? "펼치기" : "접기"}
+        로그아웃
       </Button>
-    </div>
+    </>
   );
-
-  const stepIndex = Math.max(0, STEPS.findIndex((s) => s.key === activeStep));
-  const panelTitle = STEPS.find((s) => s.key === activeStep)?.title ?? "";
-  const panelDesc = STEPS.find((s) => s.key === activeStep)?.desc ?? "";
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <div className="w-full px-4 py-6">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <div className="text-lg font-bold text-slate-900">체크리스트 기반 위험평가 시스템</div>
-          </div>
-          {headerRight}
-        </div>
+      <div className="flex">
+        <Sidebar
+          collapsed={sidebarCollapsed}
+          activeKey={activeStep}
+          onSelect={setActiveStep}
+          onToggle={() => setSidebarCollapsed((v) => !v)}
+        />
 
-        <div className="mt-5 flex flex-col md:flex-row gap-4">
-          {/* Left Sidebar */}
-          <div className={`${sidebarCollapsed ? "w-0" : "w-full md:w-[210px]"} transition-all overflow-hidden shrink-0`}>
-            <div className="space-y-4">
-              <Card title="프로세스 단계">
-                <div className="space-y-2">
-                  {STEPS.map((s, idx) => {
-                    const active = s.key === activeStep;
-                    const done = idx < STEPS.findIndex((x) => x.key === activeStep);
-                    return (
-                      <button
-                        key={s.key}
-                        type="button"
-                        onClick={() => setActiveStep(s.key)}
-                        className={`w-full rounded-2xl border px-3 py-3 text-left transition ${
-                          active ? "bg-slate-900 text-white border-slate-900" : "bg-white border-slate-200 hover:bg-slate-50"
-                        }`}
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <div className="text-sm font-semibold flex items-center gap-2">
-                              <span
-                                className={`inline-flex items-center justify-center w-5 h-5 rounded-full border text-xs ${
-                                  active ? "border-white/30" : "border-slate-200"
-                                }`}
-                              >
-                                {done ? "✓" : String(idx + 1)}
-                              </span>
-                              {s.title}
-                            </div>
-                            <div className={`text-xs mt-1 ${active ? "text-white/70" : "text-slate-500"}`}>{s.desc}</div>
-                          </div>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-                <div className="mt-4 flex items-center justify-between">
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      const i = STEPS.findIndex((s) => s.key === activeStep);
-                      setActiveStep(STEPS[Math.max(0, i - 1)].key);
-                    }}
-                  >
-                    이전
-                  </Button>
-                  <Button
-                    onClick={() => {
-                      const i = STEPS.findIndex((s) => s.key === activeStep);
-                      setActiveStep(STEPS[Math.min(STEPS.length - 1, i + 1)].key);
-                    }}
-                  >
-                    다음
-                  </Button>
-                </div>
-              </Card>
-</div>
-          </div>
+        <div className="flex-1 min-w-0">
+          <div className="px-6">
+            <TopBar
+              title={activeMeta?.title || "Analytics"}
+              breadcrumb={`Dashboard / Widgets / ${activeMeta?.title || ""}`}
+              right={topRight}
+            />
 
-          {/* Right Body */}
-          <div className="flex-1 min-w-0">
-            <Card title={`${stepIndex + 1}. ${panelTitle}`} desc={panelDesc} right={<Badge>Work-in-Progress</Badge>}>
+            {/* page body container */}
+            <div className="pb-10">
               {activeStep === "dashboard" ? <DashboardPanel checklistItems={checklistItems} /> : null}
 
               {activeStep === "checklist" ? (
@@ -388,44 +333,27 @@ export default function App() {
               ) : null}
 
               {activeStep === "status" ? (
-                <StatusWritePanel
-                  checklistItems={checklistItems}
-                  onUpdated={() => setChecklistReloadKey((k) => k + 1)}
-                />
+                <StatusWritePanel checklistItems={checklistItems} onUpdated={() => setChecklistReloadKey((k) => k + 1)} />
               ) : null}
 
               {activeStep === "vuln" ? (
-                <VulnIdentifyPanel
-                  checklistItems={checklistItems}
-                  onUpdated={() => setChecklistReloadKey((k) => k + 1)}
-                />
+                <VulnIdentifyPanel checklistItems={checklistItems} onUpdated={() => setChecklistReloadKey((k) => k + 1)} />
               ) : null}
 
-              {activeStep === "analysis" ? (
-                <RiskEvaluatePanel
-                  checklistItems={checklistItems}
-                  onUpdated={() => setChecklistReloadKey((k) => k + 1)}
-                />
+              {activeStep === "risk_evaluate" ? (
+                <RiskEvaluatePanel checklistItems={checklistItems} onUpdated={() => setChecklistReloadKey((k) => k + 1)} />
               ) : null}
 
-              {activeStep === "treatment" ? (
-                <RiskTreatmentPanel
-                  checklistItems={checklistItems}
-                  onUpdated={() => setChecklistReloadKey((k) => k + 1)}
-                />
+              {activeStep === "risk_treatment" ? (
+                <RiskTreatmentPanel checklistItems={checklistItems} onUpdated={() => setChecklistReloadKey((k) => k + 1)} />
               ) : null}
 
               {activeStep === "residual" ? (
-                <ResidualRiskPanel
-                  checklistItems={checklistItems}
-                  onUpdated={() => setChecklistReloadKey((k) => k + 1)}
-                />
+                <ResidualRiskPanel checklistItems={checklistItems} onUpdated={() => setChecklistReloadKey((k) => k + 1)} />
               ) : null}
 
-              {activeStep === "approve" ? <ApprovePanel risks={risks} onApproveAll={approveAll} /> : null}
-
-              {/* 아래 legacy 패널들(Scenario/Analysis 등)은 현재 STEPS에 없어서 렌더되지 않음 */}
-            </Card>
+              {activeStep === "approve" ? <ApprovePanel checklistItems={checklistItems} onApproveAll={approveAll} /> : null}
+            </div>
           </div>
         </div>
       </div>

@@ -1,49 +1,49 @@
+// src/components/DashboardPanel.jsx
 import React, { useMemo } from "react";
-
-/**
- * DashboardPanel.jsx
- * - "대시보드" 메뉴 전용 화면
- * - checklistItems(SSOT: Checklist 시트 로드 결과)만을 기준으로 KPI를 계산해서 보여줌
- *
- * KPI
- * 1) 통제 항목 관리: 통제 갯수
- * 2) 통제 이행 점검: 진행률 (status 입력된 항목 / 전체)
- * 3) 취약 도출: 진행률 (result=양호/취약 저장된 항목 / 전체)
- * 4) 위험 평가: 영향도(impact) 지정된 갯수
- * 5) 위험 처리: 위험(취약) 갯수 (result=취약)
- */
+import DomainVulnRateChart from "./DomainVulnRateChart";
 
 function toText(v) {
   return v == null ? "" : String(v);
 }
 
-function pct(done, total) {
-  if (!total) return 0;
-  return Math.round((done / total) * 100);
+function pct(n, d) {
+  if (!d) return 0;
+  return Math.round((n / d) * 1000) / 10; // 소수 1자리 %
 }
 
-function KpiCard({ title, value, sub, barPct, tone = "default" }) {
-  const toneCls =
-    tone === "blue"
-      ? "border-blue-200 bg-blue-50"
-      : tone === "red"
-      ? "border-red-200 bg-red-50"
-      : "border-slate-200 bg-white";
+function buildDomainRows(checklistItems) {
+  const map = new Map();
 
+  for (const x of checklistItems || []) {
+    const domain = toText(x.domain).trim() || "미지정";
+    const r = toText(x.result || x.vulnResult).trim();
+
+    const cur =
+      map.get(domain) || { domain, total: 0, vuln: 0, ok: 0, empty: 0 };
+
+    cur.total += 1;
+    if (r === "취약") cur.vuln += 1;
+    else if (r === "양호") cur.ok += 1;
+    else cur.empty += 1;
+
+    map.set(domain, cur);
+  }
+
+  const rows = Array.from(map.values()).map((d) => ({
+    ...d,
+    rate: d.total ? Math.round((d.vuln / d.total) * 1000) / 10 : 0, // 소수1자리
+  }));
+
+  rows.sort((a, b) => b.rate - a.rate || b.vuln - a.vuln || b.total - a.total);
+  return rows;
+}
+
+function KpiCard({ title, value, sub }) {
   return (
-    <div className={`rounded-2xl border p-4 ${toneCls}`}>
-      <div className="text-xs font-semibold text-slate-600">{title}</div>
-      <div className="mt-1 text-2xl font-bold text-slate-900">{value}</div>
-      {sub ? <div className="mt-1 text-xs text-slate-500">{sub}</div> : null}
-
-      {typeof barPct === "number" ? (
-        <div className="mt-3 h-2 w-full rounded-full bg-slate-100 overflow-hidden">
-          <div
-            className="h-full bg-slate-900"
-            style={{ width: `${Math.max(0, Math.min(100, barPct))}%` }}
-          />
-        </div>
-      ) : null}
+    <div className="rounded-2xl border border-slate-200 bg-white p-5">
+      <div className="text-xs font-semibold text-slate-500">{title}</div>
+      <div className="mt-2 text-2xl font-bold text-slate-900">{value}</div>
+      {sub ? <div className="mt-2 text-xs text-slate-500">{sub}</div> : null}
     </div>
   );
 }
@@ -52,20 +52,22 @@ export default function DashboardPanel({ checklistItems = [] }) {
   const kpi = useMemo(() => {
     const total = Array.isArray(checklistItems) ? checklistItems.length : 0;
 
-    // 2) 통제 이행 점검 진행률: status가 비어있지 않은 항목 수
-    const statusDone = (checklistItems || []).filter((x) => toText(x.status).trim().length > 0).length;
+    const statusDone = (checklistItems || []).filter(
+      (x) => toText(x.status).trim().length > 0
+    ).length;
 
-    // 3) 취약 도출 진행률: result가 "양호" 또는 "취약"으로 저장된 항목 수
     const vulnDone = (checklistItems || []).filter((x) => {
       const r = toText(x.result || x.vulnResult).trim();
       return r === "양호" || r === "취약";
     }).length;
 
-    // 4) 위험 평가: impact 지정된 항목 수
-    const impactCount = (checklistItems || []).filter((x) => toText(x.impact).trim().length > 0).length;
+    const riskCount = (checklistItems || []).filter(
+      (x) => toText(x.result || x.vulnResult).trim() === "취약"
+    ).length;
 
-    // 5) 위험 처리: 위험(취약) 갯수
-    const riskCount = (checklistItems || []).filter((x) => toText(x.result || x.vulnResult).trim() === "취약").length;
+    const okCount = (checklistItems || []).filter(
+      (x) => toText(x.result || x.vulnResult).trim() === "양호"
+    ).length;
 
     return {
       total,
@@ -73,36 +75,100 @@ export default function DashboardPanel({ checklistItems = [] }) {
       statusPct: pct(statusDone, total),
       vulnDone,
       vulnPct: pct(vulnDone, total),
-      impactCount,
       riskCount,
+      okCount,
+      emptyCount: Math.max(0, total - (riskCount + okCount)),
     };
   }, [checklistItems]);
 
+  const domainRows = useMemo(
+    () => buildDomainRows(checklistItems),
+    [checklistItems]
+  );
+
   return (
-    <div className="space-y-4">
-      <div className="rounded-2xl border border-slate-200 bg-white p-4">
-        <div className="text-sm font-semibold text-slate-900">대시보드</div>
-        <div className="mt-1 text-xs text-slate-500">
-          Checklist 시트(단일 기준 데이터)를 기반으로 전체 진행 현황을 요약합니다.
-        </div>
+    <div className="w-full max-w-none space-y-6">
+      {/* KPI */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <KpiCard title="총 점검 항목" value={kpi.total} />
+        <KpiCard
+          title="취약"
+          value={kpi.riskCount}
+          sub={`취약률(전체 대비): ${pct(kpi.riskCount, kpi.total)}%`}
+        />
+        <KpiCard
+          title="양호"
+          value={kpi.okCount}
+          sub={`양호율(전체 대비): ${pct(kpi.okCount, kpi.total)}%`}
+        />
+        <KpiCard
+          title="미평가"
+          value={kpi.emptyCount}
+          sub={`평가완료: ${kpi.vulnDone}/${kpi.total} (${kpi.vulnPct}%)`}
+        />
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        <KpiCard title="통제 항목 관리" value={`${kpi.total}개`} sub="통제(항목) 총 개수" />
-        <KpiCard
-          title="통제 이행 점검"
-          value={`${kpi.statusPct}%`}
-          sub={`${kpi.statusDone}/${kpi.total} (status 입력 완료)`}
-          barPct={kpi.statusPct}
-        />
-        <KpiCard
-          title="취약 도출"
-          value={`${kpi.vulnPct}%`}
-          sub={`${kpi.vulnDone}/${kpi.total} (양호/취약 저장 완료)`}
-          barPct={kpi.vulnPct}
-        />
-        <KpiCard title="위험 평가" value={`${kpi.impactCount}건`} sub="impact(영향도) 지정된 항목 수" tone="blue" />
-        <KpiCard title="위험 처리" value={`${kpi.riskCount}건`} sub="result=취약 항목 수" tone="red" />
+      {/* 도메인별 취약률 그래프 */}
+      <DomainVulnRateChart checklistItems={checklistItems} maxDomains={12} />
+
+      {/* 도메인 요약 테이블 */}
+      <div className="rounded-2xl border border-slate-200 bg-white p-5">
+        <div className="flex items-end justify-between gap-3 flex-wrap">
+          <div>
+            <div className="text-sm font-semibold text-slate-900">
+              도메인별 요약
+            </div>
+            <div className="text-xs text-slate-500 mt-1">
+              도메인 기준으로 전체/취약/양호/미입력 및 취약률을 집계합니다.
+            </div>
+          </div>
+          <div className="text-xs text-slate-500">
+            도메인 {domainRows.length}개
+          </div>
+        </div>
+
+        <div className="mt-4 overflow-x-auto">
+          <table className="min-w-[900px] w-full text-sm">
+            <thead>
+              <tr className="text-xs text-slate-500 border-b border-slate-200">
+                <th className="text-left py-2 pr-3">도메인</th>
+                <th className="text-right py-2 px-3">전체</th>
+                <th className="text-right py-2 px-3">취약</th>
+                <th className="text-right py-2 px-3">양호</th>
+                <th className="text-right py-2 px-3">미입력</th>
+                <th className="text-right py-2 pl-3">취약률</th>
+              </tr>
+            </thead>
+            <tbody>
+              {domainRows.map((r) => (
+                <tr
+                  key={r.domain}
+                  className="border-b border-slate-100 text-slate-800"
+                >
+                  <td className="py-3 pr-3 font-medium">{r.domain}</td>
+                  <td className="py-3 px-3 text-right">{r.total}</td>
+                  <td className="py-3 px-3 text-right">{r.vuln}</td>
+                  <td className="py-3 px-3 text-right">{r.ok}</td>
+                  <td className="py-3 px-3 text-right">{r.empty}</td>
+                  <td className="py-3 pl-3 text-right font-semibold">
+                    {r.rate}%
+                  </td>
+                </tr>
+              ))}
+
+              {domainRows.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={6}
+                    className="py-10 text-center text-sm text-slate-500"
+                  >
+                    표시할 데이터가 없습니다.
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
