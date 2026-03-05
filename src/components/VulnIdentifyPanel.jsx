@@ -78,14 +78,38 @@ function EvidencePreview({ url }) {
 }
 
 function RowCard({ row, isSaving, onSave }) {
-  const [result, setResult] = useState(""); // 처음엔 항상 "선택"
+  // ✅ 기존 저장값을 초기값으로 보여주기 (안 그러면 "저장했는데 왜 선택이 비었지?"가 발생)
+  const [result, setResult] = useState(safeStr(row.result).trim());
   const [detail, setDetail] = useState(safeStr(row.result_detail));
 
+  // ✅ 결과를 "양호"로 바꾸면, 화면의 detail도 비워서 UX/데이터 일관성 유지
+  useEffect(() => {
+    if (result === "양호") setDetail("");
+  }, [result]);
+
   async function handleSave() {
-    await onSave(row.code, {
-      result: result || null,
-      result_detail: result === "취약" ? (detail ? detail : null) : null,
-    });
+    const r = safeStr(result).trim();
+    if (!r) {
+      alert("결과를 선택하세요.");
+      return;
+    }
+
+    // ✅ 핵심: 양호면 result_detail + reason 무조건 NULL로 초기화
+    const payload =
+      r === "취약"
+        ? {
+            result: "취약",
+            result_detail: detail.trim() ? detail.trim() : null,
+            // reason 입력 UI가 없더라도, 기존 데이터가 남아있을 수 있으니 유지하거나 함께 비우고 싶으면 아래처럼 선택
+            // reason: safeStr(row.reason).trim() || null,
+          }
+        : {
+            result: "양호",
+            result_detail: null,
+            reason: null,
+          };
+
+    await onSave(row.code, payload);
   }
 
   const statusText = safeStr(row.status ?? row.current_status ?? row.state).trim();
@@ -125,7 +149,7 @@ function RowCard({ row, isSaving, onSave }) {
         </div>
       ) : null}
 
-      {/* 증적(썸네일/링크) */}
+      {/* 증적 */}
       {evidenceUrl ? <EvidencePreview url={evidenceUrl} /> : null}
 
       {/* 결과 라인 */}
@@ -142,10 +166,11 @@ function RowCard({ row, isSaving, onSave }) {
           <option value="취약">취약</option>
         </select>
 
-        {/* ✅ 양호면 같은 라인 우측 끝에 저장 */}
+        {/* 양호 저장 버튼 */}
         {result === "양호" ? (
           <div className="ml-auto">
             <button
+              type="button"
               onClick={handleSave}
               disabled={isSaving}
               className="h-[42px] px-5 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800 disabled:opacity-50"
@@ -156,7 +181,7 @@ function RowCard({ row, isSaving, onSave }) {
         ) : null}
       </div>
 
-      {/* ✅ 취약이면 사유 + 저장 */}
+      {/* 취약이면 사유(상세) + 저장 */}
       {result === "취약" ? (
         <div className="space-y-2">
           <div className="text-sm font-bold text-slate-800">사유</div>
@@ -170,6 +195,7 @@ function RowCard({ row, isSaving, onSave }) {
             />
 
             <button
+              type="button"
               onClick={handleSave}
               disabled={isSaving}
               className="h-[42px] px-5 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800 disabled:opacity-50"
@@ -314,7 +340,13 @@ export default function VulnIdentifyPanel({ checklistItems = [], onUpdated }) {
   async function onSave(code, patch) {
     try {
       setSavingCode(code);
-      await updateChecklistByCode(code, patch);
+
+      // ✅ undefined 제거(안전), null은 유지해야 DB에서 지워짐
+      const payload = Object.fromEntries(
+        Object.entries(patch || {}).filter(([, v]) => v !== undefined)
+      );
+
+      await updateChecklistByCode(code, payload);
       onUpdated?.();
     } catch (e) {
       alert("저장 실패: " + e.message);
@@ -324,9 +356,7 @@ export default function VulnIdentifyPanel({ checklistItems = [], onUpdated }) {
   }
 
   return (
-    // ✅ ChecklistPanel과 동일한 높이/간격 규격
     <div className="h-[calc(100vh-160px)] flex flex-col gap-4 w-full max-w-none">
-      {/* ✅ 상단 고정: ChecklistPanel과 동일 규격 */}
       <div className={["sticky top-0 z-10", "-mx-6 px-6", "bg-slate-50/95 backdrop-blur", "pt-1"].join(" ")}>
         <div className="rounded-2xl border border-slate-200 bg-white p-4">
           <div className="flex items-center gap-2 flex-wrap">
@@ -399,11 +429,9 @@ export default function VulnIdentifyPanel({ checklistItems = [], onUpdated }) {
           </div>
         </div>
 
-        {/* ✅ 고정영역 하단 경계: ChecklistPanel과 동일 */}
         <div className="mt-4 border-b border-slate-200" />
       </div>
 
-      {/* ✅ 하단 스크롤 영역: ChecklistPanel과 동일 */}
       <div className="flex-1 min-h-0 overflow-y-auto pr-1 pb-6 space-y-3">
         {paged.map((row) => (
           <RowCard key={row.code} row={row} isSaving={savingCode === row.code} onSave={onSave} />
@@ -413,7 +441,6 @@ export default function VulnIdentifyPanel({ checklistItems = [], onUpdated }) {
           <div className="py-10 text-center text-sm text-slate-500">표시할 항목이 없습니다.</div>
         ) : null}
 
-        {/* 페이지네이션 */}
         {totalPages > 1 ? (
           <div className="rounded-2xl border border-slate-200 bg-white p-4">
             <div className="flex items-center justify-center gap-2 flex-wrap">
@@ -424,18 +451,6 @@ export default function VulnIdentifyPanel({ checklistItems = [], onUpdated }) {
               >
                 이전
               </Button>
-
-              {totalPages > 10 && pageNumbers[0] > 1 ? (
-                <>
-                  <button
-                    onClick={() => setPage(1)}
-                    className="h-9 min-w-[36px] px-3 rounded-xl border text-sm font-semibold bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
-                  >
-                    1
-                  </button>
-                  <span className="text-slate-400 px-1">…</span>
-                </>
-              ) : null}
 
               {pageNumbers.map((n) => {
                 const active = n === pageSafe;
@@ -455,18 +470,6 @@ export default function VulnIdentifyPanel({ checklistItems = [], onUpdated }) {
                   </button>
                 );
               })}
-
-              {totalPages > 10 && pageNumbers[pageNumbers.length - 1] < totalPages ? (
-                <>
-                  <span className="text-slate-400 px-1">…</span>
-                  <button
-                    onClick={() => setPage(totalPages)}
-                    className="h-9 min-w-[36px] px-3 rounded-xl border text-sm font-semibold bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
-                  >
-                    {totalPages}
-                  </button>
-                </>
-              ) : null}
 
               <Button
                 variant="outline"

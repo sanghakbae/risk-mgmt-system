@@ -31,7 +31,7 @@ function isImageUrl(url) {
   return /\.(png|jpg|jpeg|gif|webp|bmp|svg)(\?.*)?$/.test(u);
 }
 
-// ✅ 회사 정책 Risk Matrix(스크린샷 동일)
+// ✅ 회사 정책 Risk Matrix
 function riskNumber(l, i) {
   const map = {
     "3-1": 6,
@@ -74,7 +74,13 @@ function EvidencePreviewInline({ url }) {
   return (
     <div className="flex items-center gap-2">
       {img ? (
-        <a href={u} target="_blank" rel="noopener noreferrer" className="block" title="원본 새 탭으로 열기">
+        <a
+          href={u}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="block"
+          title="원본 새 탭으로 열기"
+        >
           <img
             src={u}
             alt="evidence"
@@ -127,19 +133,25 @@ function RiskCard({ row, draft, onChangeDraft, onSave, saving }) {
         </div>
 
         <div className="shrink-0 flex items-center gap-2">
-          <span className={["px-3 py-1 rounded-full border text-sm font-semibold", badgeClassFromRisk(rn)].join(" ")}>
+          <span
+            className={[
+              "px-3 py-1 rounded-full border text-sm font-semibold",
+              badgeClassFromRisk(rn),
+            ].join(" ")}
+          >
             {riskLabelFromNumber(rn)}
           </span>
         </div>
       </div>
 
-      {/* ✅ 현황 박스 (볼드 라벨, padding 축소) */}
+      {/* ✅ 현황 */}
       {statusText ? (
         <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
           <div className="text-sm font-semibold text-slate-900">현황</div>
-          <div className="mt-1 text-sm text-slate-800 whitespace-pre-wrap break-words">{statusText}</div>
+          <div className="mt-1 text-sm text-slate-800 whitespace-pre-wrap break-words">
+            {statusText}
+          </div>
 
-          {/* ✅ 현황에 증적도 같이 보이게 (있으면) */}
           {evidenceUrl ? (
             <div className="mt-2">
               <EvidencePreviewInline url={evidenceUrl} />
@@ -147,7 +159,6 @@ function RiskCard({ row, draft, onChangeDraft, onSave, saving }) {
           ) : null}
         </div>
       ) : evidenceUrl ? (
-        // 현황이 비어도 증적이 있으면 보여줌
         <div className="rounded-2xl border border-slate-200 bg-white px-3 py-2">
           <div className="text-sm font-semibold text-slate-900">증적</div>
           <div className="mt-2">
@@ -156,11 +167,13 @@ function RiskCard({ row, draft, onChangeDraft, onSave, saving }) {
         </div>
       ) : null}
 
-      {/* ✅ 사유 박스 (볼드 라벨, padding 축소) */}
+      {/* ✅ 사유 */}
       {reasonText ? (
         <div className="rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2">
           <div className="text-sm font-semibold text-rose-700">사유</div>
-          <div className="mt-1 text-sm text-rose-700 whitespace-pre-wrap break-words">{reasonText}</div>
+          <div className="mt-1 text-sm text-rose-700 whitespace-pre-wrap break-words">
+            {reasonText}
+          </div>
         </div>
       ) : null}
 
@@ -195,9 +208,7 @@ function RiskCard({ row, draft, onChangeDraft, onSave, saving }) {
         </div>
 
         <div className="flex items-center gap-3 ml-auto">
-          <div className="text-sm text-slate-500">
-            * 두 값 모두 선택 후 저장하세요.
-          </div>
+          <div className="text-sm text-slate-500">* 두 값 모두 선택 후 저장하세요.</div>
 
           <Button
             onClick={() => onSave(row, draft)}
@@ -212,20 +223,27 @@ function RiskCard({ row, draft, onChangeDraft, onSave, saving }) {
 }
 
 export default function RiskEvaluatePanel({ checklistItems = [], onUpdated }) {
-  const rows = useMemo(() => (Array.isArray(checklistItems) ? checklistItems : []), [checklistItems]);
+  const rows = useMemo(
+    () => (Array.isArray(checklistItems) ? checklistItems : []),
+    [checklistItems]
+  );
+
+  // ✅ 중요: checklistItems가 리로드로 바뀌면 draft가 예전값을 덮어쓰는 문제 해결
+  const [draftByCode, setDraftByCode] = useState({});
+  useEffect(() => {
+    setDraftByCode({});
+  }, [rows]);
 
   // 필터
   const [typeFilter, setTypeFilter] = useState(TYPE_ALL);
   const [domainFilter, setDomainFilter] = useState("전체");
   const [areaFilter, setAreaFilter] = useState("전체");
-  const [statusFilter, setStatusFilter] = useState("전체"); // 입력됨/미입력 (risk 값 기준)
+  const [statusFilter, setStatusFilter] = useState("전체"); // 입력됨/미입력
   const [keyword, setKeyword] = useState("");
 
   // paging
   const [page, setPage] = useState(1);
 
-  // draft state (code별)
-  const [draftByCode, setDraftByCode] = useState({});
   const [savingCode, setSavingCode] = useState(null);
 
   const typeOptions = useMemo(() => {
@@ -268,6 +286,7 @@ export default function RiskEvaluatePanel({ checklistItems = [], onUpdated }) {
     const d = draftByCode[code];
     if (d) return d;
 
+    // ✅ row의 최신값을 기본으로 사용 (리로드 후 반영됨)
     const lRaw = row.likelihood ?? row.Likelihood ?? row.risk_likelihood ?? "";
     const iRaw = row.impact ?? row.Impact ?? row.risk_impact ?? "";
 
@@ -372,7 +391,7 @@ export default function RiskEvaluatePanel({ checklistItems = [], onUpdated }) {
     const l = draft.likelihood === "" ? null : Number(draft.likelihood);
     const i = draft.impact === "" ? null : Number(draft.impact);
 
-    if (!l || !i) {
+    if (!Number.isFinite(l) || !Number.isFinite(i) || !l || !i) {
       alert("Likelihood/Impact 두 값을 모두 선택하세요.");
       return;
     }
@@ -380,14 +399,23 @@ export default function RiskEvaluatePanel({ checklistItems = [], onUpdated }) {
     try {
       setSavingCode(code);
 
-      await updateChecklistByCode(code, {
+      // ✅ payload: 숫자만 / null 없음 (여기서는 둘 다 필수)
+      const payload = {
         likelihood: l,
         impact: i,
-        risk: riskNumber(l, i),
-      });
+        risk: riskNumber(l, i), // risk 컬럼이 있으면 유지, 없으면 제거 필요
+      };
 
+      await updateChecklistByCode(code, payload);
+
+      // ✅ 저장 직후에도 화면이 최신값으로 보이도록 draft도 갱신
+      setDraftByCode((prev) => ({
+        ...prev,
+        [code]: { likelihood: String(l), impact: String(i) },
+      }));
+
+      // ✅ 상위에서 최신 checklist 재조회
       onUpdated?.();
-      alert("저장 완료");
     } catch (e) {
       alert("저장 실패: " + (e?.message || "unknown"));
     } finally {
@@ -470,7 +498,7 @@ export default function RiskEvaluatePanel({ checklistItems = [], onUpdated }) {
         <div className="mt-4 border-b border-slate-200" />
       </div>
 
-      {/* 리스트(스크롤) */}
+      {/* 리스트 */}
       <div className="flex-1 min-h-0 overflow-y-auto pr-1 pb-6 space-y-3">
         {paged.map((row) => {
           const code = safeStr(row.code);
