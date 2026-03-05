@@ -1,28 +1,35 @@
 // src/components/RiskEvaluatePanel.jsx
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Button from "../ui/Button";
 import { updateChecklistByCode } from "../api/checklist";
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 5;
 
 const TYPE_ALL = "전체";
 const TYPE_ISMS = "ISMS";
 const TYPE_ISO = "ISO27001";
 
-function normalizeType(v) {
-  const s = String(v ?? "").trim();
-  if (!s) return "";
-  if (s.toUpperCase().includes("ISO")) return TYPE_ISO;
-  if (s.toUpperCase().includes("ISMS")) return TYPE_ISMS;
-  return s;
-}
 function safeStr(v) {
   return v == null ? "" : String(v);
 }
 
-// ✅ UI 표기(문자열) ↔ DB 저장값(숫자) 매핑 (회사 정책 3x3)
-const L_LABEL = { 1: "Unlikely", 2: "Likely", 3: "Highly Likely" };
-const I_LABEL = { 1: "Low", 2: "Medium", 3: "High" };
+function normalizeType(v) {
+  const s = safeStr(v).trim();
+  if (!s) return "";
+  const u = s.toUpperCase();
+  if (u.includes("ISO")) return TYPE_ISO;
+  if (u.includes("ISMS")) return TYPE_ISMS;
+  return s;
+}
+
+function clamp(n, min, max) {
+  return Math.max(min, Math.min(max, n));
+}
+
+function isImageUrl(url) {
+  const u = safeStr(url).trim().toLowerCase();
+  return /\.(png|jpg|jpeg|gif|webp|bmp|svg)(\?.*)?$/.test(u);
+}
 
 // ✅ 회사 정책 Risk Matrix(스크린샷 동일)
 function riskNumber(l, i) {
@@ -41,207 +48,129 @@ function riskNumber(l, i) {
 }
 
 function riskLabelFromNumber(n) {
-  if (n == null) return "-";
+  if (n == null) return "Risk -";
   if (n <= 3) return `Risk ${n} · High`;
   if (n <= 6) return `Risk ${n} · Medium`;
   return `Risk ${n} · Low`;
 }
 
 function badgeClassFromRisk(n) {
-  if (n == null) return "bg-slate-100 text-slate-700 border-slate-200";
+  if (n == null) return "bg-slate-50 text-slate-600 border-slate-200";
   if (n <= 3) return "bg-rose-50 text-rose-700 border-rose-200";
   if (n <= 6) return "bg-amber-50 text-amber-800 border-amber-200";
   return "bg-blue-50 text-blue-700 border-blue-200";
 }
 
-function riskBg(n) {
-  if (n == null) return "bg-slate-50";
-  if (n <= 3) return "bg-rose-100";
-  if (n <= 6) return "bg-amber-100";
-  return "bg-blue-100";
-}
+// ✅ UI 표기(문자열)
+const L_LABEL = { 1: "Unlikely", 2: "Likely", 3: "Highly Likely" };
+const I_LABEL = { 1: "Low", 2: "Medium", 3: "High" };
 
-function ProgressBar({ done, total, highCount, medCount, lowCount }) {
-  const ratio = total <= 0 ? 0 : done / total;
-  const pct = Math.round(ratio * 100);
-  const notDone = Math.max(0, (total ?? 0) - (done ?? 0));
+function EvidencePreviewInline({ url }) {
+  const u = safeStr(url).trim();
+  if (!u) return null;
 
-  // 100% 초록, 50% 미만 빨강, 그 외 amber (기존 톤 유지)
-  const barClass = pct === 100 ? "bg-emerald-500" : pct < 50 ? "bg-rose-500" : "bg-amber-500";
+  const img = isImageUrl(u);
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4">
-      <div className="flex items-center justify-between text-sm text-slate-700">
-        <div className="font-semibold">평가 진행률</div>
-        <div className="tabular-nums">
-          {done}/{total} ({pct}%)
-        </div>
-      </div>
-      <div className="mt-2 h-2 w-full rounded-full bg-slate-100 overflow-hidden">
-        <div className={`h-full ${barClass}`} style={{ width: `${pct}%` }} />
-      </div>
-
-      {/* 휑함 개선: 요약 카드 */}
-      <div className="mt-3 grid grid-cols-3 gap-2">
-        {/* 1행: 총 대상 / 완료 / 미완료 */}
-        <div className="rounded-xl border border-slate-200 bg-white p-3">
-          <div className="text-xs text-slate-500 font-semibold">총 대상</div>
-          <div className="text-lg font-bold text-slate-900 tabular-nums">{total}</div>
-        </div>
-
-        <div className="rounded-xl border border-slate-200 bg-white p-3">
-          <div className="text-xs text-slate-500 font-semibold">완료</div>
-          <div className="text-lg font-bold text-slate-900 tabular-nums">{done}</div>
-        </div>
-
-        <div className="rounded-xl border border-slate-200 bg-white p-3">
-          <div className="text-xs text-slate-500 font-semibold">미완료</div>
-          <div className="text-lg font-bold text-slate-900 tabular-nums">{notDone}</div>
-        </div>
-
-        {/* 2행: High / Medium / Low */}
-        <div className="rounded-xl border border-slate-200 bg-white p-3">
-          <div className="text-xs text-rose-700 font-semibold">High</div>
-          <div className="text-lg font-bold text-rose-700 tabular-nums">{highCount}</div>
-        </div>
-
-        <div className="rounded-xl border border-slate-200 bg-white p-3">
-          <div className="text-xs text-amber-800 font-semibold">Medium</div>
-          <div className="text-lg font-bold text-amber-800 tabular-nums">{medCount}</div>
-        </div>
-
-        <div className="rounded-xl border border-slate-200 bg-white p-3">
-          <div className="text-xs text-blue-700 font-semibold">Low</div>
-          <div className="text-lg font-bold text-blue-700 tabular-nums">{lowCount}</div>
-        </div>
-      </div>
+    <div className="flex items-center gap-2">
+      {img ? (
+        <a href={u} target="_blank" rel="noopener noreferrer" className="block" title="원본 새 탭으로 열기">
+          <img
+            src={u}
+            alt="evidence"
+            className="h-12 w-12 rounded-lg border border-slate-200 object-cover hover:opacity-90"
+            loading="lazy"
+          />
+        </a>
+      ) : (
+        <a
+          href={u}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-sm text-blue-600 underline"
+        >
+          업로드된 증적 보기
+        </a>
+      )}
     </div>
   );
 }
 
-function RiskMatrixMini() {
-  const cells = [
-    [{ l: 3, i: 1 }, { l: 3, i: 2 }, { l: 3, i: 3 }],
-    [{ l: 2, i: 1 }, { l: 2, i: 2 }, { l: 2, i: 3 }],
-    [{ l: 1, i: 1 }, { l: 1, i: 2 }, { l: 1, i: 3 }],
-  ];
+function RiskCard({ row, draft, onChangeDraft, onSave, saving }) {
+  const code = safeStr(row.code);
+  const type = normalizeType(row.type);
+  const domain = safeStr(row.domain);
+  const area = safeStr(row.area);
+  const title = safeStr(row.itemCode ?? row.itemcode);
+
+  const statusText = safeStr(row.status ?? row.current_status ?? row.state).trim();
+  const reasonText = safeStr(row.reason ?? row.result_detail).trim();
+  const evidenceUrl = safeStr(row.evidence_url).trim();
+
+  const l = draft.likelihood === "" ? null : Number(draft.likelihood);
+  const i = draft.impact === "" ? null : Number(draft.impact);
+  const rn = l && i ? riskNumber(l, i) : null;
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4">
-      <div className="text-sm font-semibold text-slate-800 mb-3">
-        정성적 위험분석 행렬 (Qualitative Risk Matrix)
-      </div>
-
-      <div className="grid grid-cols-[160px_1fr] gap-3">
-        <div />
-        <div className="grid grid-cols-3 text-xs font-semibold text-slate-700">
-          <div className="text-center">Low</div>
-          <div className="text-center">Medium</div>
-          <div className="text-center">High</div>
-        </div>
-
-        <div className="space-y-2 text-xs font-semibold text-slate-700">
-          <div className="h-12 flex items-center justify-end pr-2">Highly Likely</div>
-          <div className="h-12 flex items-center justify-end pr-2">Likely</div>
-          <div className="h-12 flex items-center justify-end pr-2">Unlikely</div>
-        </div>
-
-        <div className="grid grid-rows-3 gap-2">
-          {cells.map((row, rIdx) => (
-            <div key={rIdx} className="grid grid-cols-3 gap-2">
-              {row.map((c, cIdx) => {
-                const n = riskNumber(c.l, c.i);
-                return (
-                  <div
-                    key={`${rIdx}-${cIdx}`}
-                    className={[
-                      "h-12 rounded-xl border border-slate-200 flex items-center justify-center",
-                      riskBg(n),
-                    ].join(" ")}
-                  >
-                    <div className="text-sm font-bold text-slate-900 tabular-nums">{n}</div>
-                  </div>
-                );
-              })}
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="mt-3 text-xs text-slate-500">
-        * Likelihood/Impact는 DB에는 1~3 정수로 저장됩니다.
-      </div>
-    </div>
-  );
-}
-
-function RiskCard({ row, isSaving, onSave }) {
-  const [l, setL] = useState(row.likelihood ?? "");
-  const [i, setI] = useState(row.impact ?? "");
-
-  const n = useMemo(() => {
-    const ll = l === "" ? null : Number(l);
-    const ii = i === "" ? null : Number(i);
-    if (!ll || !ii) return null;
-    return riskNumber(ll, ii);
-  }, [l, i]);
-
-  const reasonText = useMemo(() => {
-    // 취약 사유: reason 우선, 없으면 result_detail
-    const r = safeStr(row.reason).trim();
-    const d = safeStr(row.result_detail).trim();
-    return r || d;
-  }, [row.reason, row.result_detail]);
-
-  async function handleSave() {
-    const payload = {
-      // ✅ 항상 숫자/NULL만 저장 (문자열 "Medium" 같은거 절대 금지)
-      likelihood: l === "" ? null : Number(l),
-      impact: i === "" ? null : Number(i),
-    };
-    await onSave(row.code, payload);
-  }
-
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 space-y-4">
+    <div className="rounded-2xl border border-slate-200 bg-white p-5 space-y-4 text-sm text-slate-800">
+      {/* header */}
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="text-xs text-slate-500">
-            {normalizeType(row.type)} · {row.domain} · {row.area}
+          <div className="text-sm text-slate-500 whitespace-pre-wrap">
+            {type} · {domain} · {area}
           </div>
-          <div className="text-sm font-semibold text-slate-900 whitespace-pre-wrap">
-            [{row.code}] {safeStr(row.itemCode ?? row.itemcode)}
+
+          {/* ✅ 질문(볼드 + text-sm 통일) */}
+          <div className="mt-1 text-sm font-semibold text-slate-900 whitespace-pre-wrap">
+            [{code}] {title}
           </div>
-          {/* 현황(통제 이행 점검 결과) */}
-          {safeStr(row.status).trim() ? (
-            <div className="mt-2 text-sm text-slate-700">
-              <span className="font-semibold text-slate-800">현황</span>{" "}
-              <span className="text-slate-700">{safeStr(row.status)}</span>
-            </div>
-          ) : null}
         </div>
 
         <div className="shrink-0 flex items-center gap-2">
-          <span className={["px-3 py-1 rounded-full border text-xs font-semibold", badgeClassFromRisk(n)].join(" ")}>
-            {riskLabelFromNumber(n)}
+          <span className={["px-3 py-1 rounded-full border text-sm font-semibold", badgeClassFromRisk(rn)].join(" ")}>
+            {riskLabelFromNumber(rn)}
           </span>
         </div>
       </div>
 
-      {/* 사유 붉은 박스 */}
-      {reasonText ? (
-        <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4">
-          <div className="text-sm font-semibold text-rose-700 mb-1">사유</div>
-          <div className="text-sm text-rose-700 whitespace-pre-wrap">{reasonText}</div>
+      {/* ✅ 현황 박스 (볼드 라벨, padding 축소) */}
+      {statusText ? (
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
+          <div className="text-sm font-semibold text-slate-900">현황</div>
+          <div className="mt-1 text-sm text-slate-800 whitespace-pre-wrap break-words">{statusText}</div>
+
+          {/* ✅ 현황에 증적도 같이 보이게 (있으면) */}
+          {evidenceUrl ? (
+            <div className="mt-2">
+              <EvidencePreviewInline url={evidenceUrl} />
+            </div>
+          ) : null}
+        </div>
+      ) : evidenceUrl ? (
+        // 현황이 비어도 증적이 있으면 보여줌
+        <div className="rounded-2xl border border-slate-200 bg-white px-3 py-2">
+          <div className="text-sm font-semibold text-slate-900">증적</div>
+          <div className="mt-2">
+            <EvidencePreviewInline url={evidenceUrl} />
+          </div>
         </div>
       ) : null}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <div>
-          <div className="text-xs font-semibold text-slate-700 mb-1">Likelihood</div>
+      {/* ✅ 사유 박스 (볼드 라벨, padding 축소) */}
+      {reasonText ? (
+        <div className="rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2">
+          <div className="text-sm font-semibold text-rose-700">사유</div>
+          <div className="mt-1 text-sm text-rose-700 whitespace-pre-wrap break-words">{reasonText}</div>
+        </div>
+      ) : null}
+
+      {/* Likelihood / Impact + 저장 */}
+      <div className="flex items-end gap-4 flex-wrap">
+        <div className="min-w-[240px]">
+          <div className="text-sm font-semibold text-slate-900 mb-2">Likelihood</div>
           <select
-            value={l}
-            onChange={(e) => setL(e.target.value)}
+            value={draft.likelihood}
+            onChange={(e) => onChangeDraft(code, { likelihood: e.target.value })}
             className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
           >
             <option value="">선택</option>
@@ -251,11 +180,11 @@ function RiskCard({ row, isSaving, onSave }) {
           </select>
         </div>
 
-        <div>
-          <div className="text-xs font-semibold text-slate-700 mb-1">Impact</div>
+        <div className="min-w-[240px]">
+          <div className="text-sm font-semibold text-slate-900 mb-2">Impact</div>
           <select
-            value={i}
-            onChange={(e) => setI(e.target.value)}
+            value={draft.impact}
+            onChange={(e) => onChangeDraft(code, { impact: e.target.value })}
             className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
           >
             <option value="">선택</option>
@@ -264,192 +193,377 @@ function RiskCard({ row, isSaving, onSave }) {
             <option value="3">{I_LABEL[3]}</option>
           </select>
         </div>
-      </div>
 
-      <div className="flex items-center justify-between">
-        <div className="text-xs text-slate-500">{isSaving ? "저장 중..." : "* 두 값 모두 선택 후 저장하세요."}</div>
-        <Button onClick={handleSave} disabled={isSaving || l === "" || i === ""}>
-          저장
-        </Button>
+        <div className="flex items-center gap-3 ml-auto">
+          <div className="text-sm text-slate-500">
+            * 두 값 모두 선택 후 저장하세요.
+          </div>
+
+          <Button
+            onClick={() => onSave(row, draft)}
+            disabled={saving || draft.likelihood === "" || draft.impact === ""}
+          >
+            {saving ? "처리 중..." : "저장"}
+          </Button>
+        </div>
       </div>
     </div>
   );
 }
 
 export default function RiskEvaluatePanel({ checklistItems = [], onUpdated }) {
+  const rows = useMemo(() => (Array.isArray(checklistItems) ? checklistItems : []), [checklistItems]);
+
+  // 필터
   const [typeFilter, setTypeFilter] = useState(TYPE_ALL);
-  const [domainFilter, setDomainFilter] = useState("");
+  const [domainFilter, setDomainFilter] = useState("전체");
+  const [areaFilter, setAreaFilter] = useState("전체");
+  const [statusFilter, setStatusFilter] = useState("전체"); // 입력됨/미입력 (risk 값 기준)
+  const [keyword, setKeyword] = useState("");
+
+  // paging
   const [page, setPage] = useState(1);
+
+  // draft state (code별)
+  const [draftByCode, setDraftByCode] = useState({});
   const [savingCode, setSavingCode] = useState(null);
 
-  const typeOptions = useMemo(() => [TYPE_ALL, TYPE_ISMS, TYPE_ISO], []);
+  const typeOptions = useMemo(() => {
+    const set = new Set();
+    for (const x of rows) {
+      const t = normalizeType(x.type);
+      if (t) set.add(t);
+    }
+    return [TYPE_ALL, ...Array.from(set).sort((a, b) => a.localeCompare(b))];
+  }, [rows]);
 
   const domainOptions = useMemo(() => {
     const set = new Set();
-    for (const x of checklistItems) {
+    for (const x of rows) {
       const t = normalizeType(x.type);
       if (typeFilter !== TYPE_ALL && t !== typeFilter) continue;
       const d = safeStr(x.domain).trim();
       if (d) set.add(d);
     }
-    return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [checklistItems, typeFilter]);
+    return ["전체", ...Array.from(set).sort((a, b) => a.localeCompare(b))];
+  }, [rows, typeFilter]);
 
-  // ✅ 위험평가 대상: result='취약'만
-  const targets = useMemo(() => {
-    return checklistItems.filter((x) => {
-      if (safeStr(x.result).trim() !== "취약") return false;
+  const areaOptions = useMemo(() => {
+    const set = new Set();
+    for (const x of rows) {
+      const t = normalizeType(x.type);
+      if (typeFilter !== TYPE_ALL && t !== typeFilter) continue;
 
+      const d = safeStr(x.domain).trim();
+      if (domainFilter !== "전체" && d !== domainFilter) continue;
+
+      const a = safeStr(x.area).trim();
+      if (a) set.add(a);
+    }
+    return ["전체", ...Array.from(set).sort((a, b) => a.localeCompare(b))];
+  }, [rows, typeFilter, domainFilter]);
+
+  function getDraft(row) {
+    const code = safeStr(row.code);
+    const d = draftByCode[code];
+    if (d) return d;
+
+    const lRaw = row.likelihood ?? row.Likelihood ?? row.risk_likelihood ?? "";
+    const iRaw = row.impact ?? row.Impact ?? row.risk_impact ?? "";
+
+    return {
+      likelihood: lRaw == null ? "" : safeStr(lRaw),
+      impact: iRaw == null ? "" : safeStr(iRaw),
+    };
+  }
+
+  function setDraft(code, patch) {
+    const k = safeStr(code);
+    setDraftByCode((prev) => ({
+      ...prev,
+      [k]: { ...(prev[k] || {}), ...patch },
+    }));
+  }
+
+  const filtered = useMemo(() => {
+    const kw = safeStr(keyword).trim().toLowerCase();
+
+    return rows.filter((x) => {
       const t = normalizeType(x.type);
       if (typeFilter !== TYPE_ALL && t !== typeFilter) return false;
 
-      if (domainFilter && safeStr(x.domain).trim() !== domainFilter) return false;
+      const d = safeStr(x.domain).trim();
+      if (domainFilter !== "전체" && d !== domainFilter) return false;
 
-      return true;
+      const a = safeStr(x.area).trim();
+      if (areaFilter !== "전체" && a !== areaFilter) return false;
+
+      const l = x.likelihood == null ? "" : safeStr(x.likelihood).trim();
+      const i = x.impact == null ? "" : safeStr(x.impact).trim();
+      const hasRisk = l !== "" && i !== "";
+      if (statusFilter === "입력됨" && !hasRisk) return false;
+      if (statusFilter === "미입력" && hasRisk) return false;
+
+      if (!kw) return true;
+
+      const hay = [
+        x.code,
+        x.itemCode,
+        x.itemcode,
+        x.domain,
+        x.area,
+        x.type,
+        x.status,
+        x.reason,
+        x.result_detail,
+        x.evidence_url,
+      ]
+        .map((v) => safeStr(v).toLowerCase())
+        .join(" | ");
+
+      return hay.includes(kw);
     });
-  }, [checklistItems, typeFilter, domainFilter]);
+  }, [rows, typeFilter, domainFilter, areaFilter, statusFilter, keyword]);
 
-  // ✅ 완료 기준: impact/likelihood 둘 다 존재
-  const doneCount = useMemo(() => {
-    return targets.filter((x) => x.likelihood != null && x.impact != null).length;
-  }, [targets]);
+  const totalPages = useMemo(() => {
+    const n = Math.ceil(filtered.length / PAGE_SIZE);
+    return n <= 0 ? 1 : n;
+  }, [filtered.length]);
 
-  // ✅ High/Medium/Low 집계(선택된 값 기준)
-  const { highCount, medCount, lowCount } = useMemo(() => {
-    let h = 0,
-      m = 0,
-      l = 0;
-    for (const x of targets) {
-      const ll = x.likelihood == null ? null : Number(x.likelihood);
-      const ii = x.impact == null ? null : Number(x.impact);
-      if (!ll || !ii) continue;
-      const rn = riskNumber(ll, ii);
-      if (rn == null) continue;
-      if (rn <= 3) h += 1;
-      else if (rn <= 6) m += 1;
-      else l += 1;
-    }
-    return { highCount: h, medCount: m, lowCount: l };
-  }, [targets]);
+  useEffect(() => {
+    setPage(1);
+  }, [typeFilter, domainFilter, areaFilter, statusFilter, keyword]);
 
-  const totalPages = Math.max(1, Math.ceil(targets.length / PAGE_SIZE));
-  const pageSafe = Math.min(Math.max(1, page), totalPages);
+  useEffect(() => {
+    setPage((p) => clamp(p, 1, totalPages));
+  }, [totalPages]);
+
+  const pageSafe = clamp(page, 1, totalPages);
 
   const paged = useMemo(() => {
     const start = (pageSafe - 1) * PAGE_SIZE;
-    return targets.slice(start, start + PAGE_SIZE);
-  }, [targets, pageSafe]);
+    return filtered.slice(start, start + PAGE_SIZE);
+  }, [filtered, pageSafe]);
 
-  async function onSave(code, payload) {
+  const maxPageButtons = 10;
+  const pageNumbers = useMemo(() => {
+    const tp = totalPages || 1;
+    const cur = clamp(pageSafe, 1, tp);
+
+    if (tp <= maxPageButtons) return Array.from({ length: tp }, (_, i) => i + 1);
+
+    const half = Math.floor(maxPageButtons / 2);
+    let start = cur - half;
+    let end = start + maxPageButtons - 1;
+
+    if (start < 1) {
+      start = 1;
+      end = maxPageButtons;
+    }
+    if (end > tp) {
+      end = tp;
+      start = tp - maxPageButtons + 1;
+    }
+    return Array.from({ length: end - start + 1 }, (_, i) => start + i);
+  }, [pageSafe, totalPages]);
+
+  async function handleSave(row, draft) {
+    const code = safeStr(row.code);
+    const l = draft.likelihood === "" ? null : Number(draft.likelihood);
+    const i = draft.impact === "" ? null : Number(draft.impact);
+
+    if (!l || !i) {
+      alert("Likelihood/Impact 두 값을 모두 선택하세요.");
+      return;
+    }
+
     try {
       setSavingCode(code);
-      await updateChecklistByCode(code, payload);
+
+      await updateChecklistByCode(code, {
+        likelihood: l,
+        impact: i,
+        risk: riskNumber(l, i),
+      });
+
       onUpdated?.();
+      alert("저장 완료");
     } catch (e) {
-      alert("저장 실패: " + e.message);
+      alert("저장 실패: " + (e?.message || "unknown"));
     } finally {
       setSavingCode(null);
     }
   }
 
-  function onChangeType(v) {
-    setTypeFilter(v);
-    setDomainFilter("");
-    setPage(1);
-  }
-
-  function onChangeDomain(v) {
-    setDomainFilter(v);
-    setPage(1);
-  }
-
   return (
-    <div className="w-full max-w-none space-y-4">
-      {/* 진행률 + 매트릭스(잔여 위험 평가와 동일 모양) */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-        <ProgressBar
-          done={doneCount}
-          total={targets.length}
-          highCount={highCount}
-          medCount={medCount}
-          lowCount={lowCount}
-        />
-        <RiskMatrixMini />
-      </div>
-
-      {/* 필터 바 */}
-      <div className="rounded-2xl border border-slate-200 bg-white p-4">
-        <div className="flex items-center gap-2 flex-wrap">
-          <select
-            value={typeFilter}
-            onChange={(e) => onChangeType(e.target.value)}
-            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
-          >
-            {typeOptions.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
-
-          {typeFilter !== TYPE_ALL ? (
+    <div className="h-[calc(100vh-180px)] flex flex-col gap-4 w-full max-w-none">
+      {/* 상단 고정 */}
+      <div className="sticky top-0 z-10 -mx-6 px-6 bg-slate-50/95 backdrop-blur pt-1">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4">
+          <div className="flex items-center gap-2 flex-wrap">
             <select
-              value={domainFilter}
-              onChange={(e) => onChangeDomain(e.target.value)}
+              value={typeFilter}
+              onChange={(e) => {
+                setTypeFilter(e.target.value);
+                setDomainFilter("전체");
+                setAreaFilter("전체");
+              }}
               className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
             >
-              <option value="">분야(전체)</option>
-              {domainOptions.map((d) => (
-                <option key={d} value={d}>
-                  {d}
+              {typeOptions.map((t) => (
+                <option key={t} value={t}>
+                  {t === TYPE_ALL ? "유형(전체)" : t}
                 </option>
               ))}
             </select>
-          ) : null}
 
-          <div className="text-sm text-slate-600 ml-auto">
-            표시 {targets.length}건 · {pageSafe}/{totalPages} 페이지
+            <select
+              value={domainFilter}
+              onChange={(e) => {
+                setDomainFilter(e.target.value);
+                setAreaFilter("전체");
+              }}
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
+            >
+              {domainOptions.map((d) => (
+                <option key={d} value={d}>
+                  {d === "전체" ? "도메인(전체)" : d}
+                </option>
+              ))}
+            </select>
+
+            <select
+              value={areaFilter}
+              onChange={(e) => setAreaFilter(e.target.value)}
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
+            >
+              {areaOptions.map((a) => (
+                <option key={a} value={a}>
+                  {a === "전체" ? "영역(전체)" : a}
+                </option>
+              ))}
+            </select>
+
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
+            >
+              <option value="전체">Risk(전체)</option>
+              <option value="입력됨">Risk(입력됨)</option>
+              <option value="미입력">Risk(미입력)</option>
+            </select>
+
+            <input
+              value={keyword}
+              onChange={(e) => setKeyword(e.target.value)}
+              className="min-w-[240px] flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
+              placeholder="검색(코드/항목/현황/사유/도메인/영역/증적)"
+            />
+
+            <div className="text-sm text-slate-600 ml-auto">
+              표시 {filtered.length}건 · {pageSafe}/{totalPages} 페이지
+            </div>
           </div>
         </div>
+
+        <div className="mt-4 border-b border-slate-200" />
       </div>
 
-      {/* 리스트 */}
-      <div className="space-y-3">
-        {paged.map((row) => (
-          <RiskCard key={row.code} row={row} isSaving={savingCode === row.code} onSave={onSave} />
-        ))}
+      {/* 리스트(스크롤) */}
+      <div className="flex-1 min-h-0 overflow-y-auto pr-1 pb-6 space-y-3">
+        {paged.map((row) => {
+          const code = safeStr(row.code);
+          const draft = getDraft(row);
+
+          return (
+            <RiskCard
+              key={code}
+              row={row}
+              draft={draft}
+              onChangeDraft={(c, patch) => setDraft(c, patch)}
+              onSave={handleSave}
+              saving={savingCode === code}
+            />
+          );
+        })}
 
         {paged.length === 0 ? (
-          <div className="py-10 text-center text-sm text-slate-500">
-            위험 평가 대상(결과=취약)이 없습니다.
+          <div className="py-10 text-center text-sm text-slate-500">표시할 항목이 없습니다.</div>
+        ) : null}
+
+        {/* 페이지네이션 */}
+        {totalPages > 1 ? (
+          <div className="rounded-2xl border border-slate-200 bg-white p-4">
+            <div className="flex items-center justify-center gap-2 flex-wrap">
+              <Button
+                variant="outline"
+                onClick={() => setPage((p) => clamp(p - 1, 1, totalPages))}
+                disabled={pageSafe <= 1}
+              >
+                이전
+              </Button>
+
+              {totalPages > 10 && pageNumbers[0] > 1 ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setPage(1)}
+                    className="h-9 min-w-[36px] px-3 rounded-xl border text-sm font-semibold bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                  >
+                    1
+                  </button>
+                  <span className="text-slate-400 px-1">…</span>
+                </>
+              ) : null}
+
+              {pageNumbers.map((n) => {
+                const active = n === pageSafe;
+                return (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => setPage(n)}
+                    className={[
+                      "h-9 min-w-[36px] px-3 rounded-xl border text-sm font-semibold",
+                      active
+                        ? "bg-slate-900 text-white border-slate-900"
+                        : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50",
+                    ].join(" ")}
+                  >
+                    {n}
+                  </button>
+                );
+              })}
+
+              {totalPages > 10 && pageNumbers[pageNumbers.length - 1] < totalPages ? (
+                <>
+                  <span className="text-slate-400 px-1">…</span>
+                  <button
+                    type="button"
+                    onClick={() => setPage(totalPages)}
+                    className="h-9 min-w-[36px] px-3 rounded-xl border text-sm font-semibold bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                  >
+                    {totalPages}
+                  </button>
+                </>
+              ) : null}
+
+              <Button
+                variant="outline"
+                onClick={() => setPage((p) => clamp(p + 1, 1, totalPages))}
+                disabled={pageSafe >= totalPages}
+              >
+                다음
+              </Button>
+            </div>
+
+            <div className="mt-2 text-center text-xs text-slate-500">
+              총 {filtered.length}건 · 페이지당 {PAGE_SIZE}건 · {pageSafe}/{totalPages} 페이지
+            </div>
           </div>
         ) : null}
       </div>
-
-      {/* 페이지네이션 */}
-      {totalPages > 1 ? (
-        <div className="flex items-center justify-center gap-2 flex-wrap">
-          {Array.from({ length: totalPages }).map((_, i) => {
-            const n = i + 1;
-            const active = n === pageSafe;
-            return (
-              <button
-                key={n}
-                type="button"
-                onClick={() => setPage(n)}
-                className={[
-                  "px-3 py-1.5 rounded-xl border text-sm font-semibold",
-                  active
-                    ? "bg-slate-900 text-white border-slate-900"
-                    : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50",
-                ].join(" ")}
-              >
-                {n}
-              </button>
-            );
-          })}
-        </div>
-      ) : null}
     </div>
   );
 }

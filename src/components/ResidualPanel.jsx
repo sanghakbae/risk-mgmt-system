@@ -1,3 +1,4 @@
+// src/components/ResidualPanel.jsx
 import React, { useMemo, useState } from "react";
 import Button from "../ui/Button";
 import { updateChecklistByCode } from "../api/checklist";
@@ -25,7 +26,6 @@ const I_LABEL = { 1: "Low", 2: "Medium", 3: "High" };
 
 // ✅ 회사 정책 Risk Matrix(스크린샷 동일)
 function riskNumber(l, i) {
-  // l, i : 1~3
   const map = {
     "3-1": 6,
     "3-2": 3,
@@ -54,17 +54,13 @@ function badgeClassFromRisk(n) {
   return "bg-blue-50 text-blue-700 border-blue-200";
 }
 
-// ✅ 진행률 카드(휑함 해결: 요약 통계 포함)
 function ProgressBar({ done, total, highRisk, mediumRisk, lowRisk }) {
   const ratio = total <= 0 ? 0 : done / total;
   const pct = Math.round(ratio * 100);
 
-  // 100% 초록, 50% 미만 빨강 (요구사항 톤 유지)
-  const barClass =
-    pct === 100 ? "bg-emerald-500" : pct < 50 ? "bg-rose-500" : "bg-amber-500";
+  const barClass = pct === 100 ? "bg-emerald-500" : pct < 50 ? "bg-rose-500" : "bg-amber-500";
 
-  const statBoxBase =
-    "rounded-xl border border-slate-200 bg-white px-3 py-2";
+  const statBoxBase = "rounded-xl border border-slate-200 bg-white px-3 py-2";
   const statTitle = "text-[11px] font-semibold text-slate-500";
   const statValue = "text-sm font-semibold text-slate-900 tabular-nums";
 
@@ -81,7 +77,6 @@ function ProgressBar({ done, total, highRisk, mediumRisk, lowRisk }) {
         <div className={`h-full ${barClass}`} style={{ width: `${pct}%` }} />
       </div>
 
-      {/* ✅ 요약 통계: 오른쪽 매트릭스와 밸런스 */}
       <div className="mt-4 grid grid-cols-2 gap-2">
         <div className={statBoxBase}>
           <div className={statTitle}>총 대상</div>
@@ -94,23 +89,17 @@ function ProgressBar({ done, total, highRisk, mediumRisk, lowRisk }) {
 
         <div className={`${statBoxBase} bg-rose-50 border-rose-200`}>
           <div className="text-[11px] font-semibold text-rose-600">High</div>
-          <div className="text-sm font-semibold text-rose-900 tabular-nums">
-            {highRisk}
-          </div>
+          <div className="text-sm font-semibold text-rose-900 tabular-nums">{highRisk}</div>
         </div>
 
         <div className={`${statBoxBase} bg-amber-50 border-amber-200`}>
           <div className="text-[11px] font-semibold text-amber-700">Medium</div>
-          <div className="text-sm font-semibold text-amber-900 tabular-nums">
-            {mediumRisk}
-          </div>
+          <div className="text-sm font-semibold text-amber-900 tabular-nums">{mediumRisk}</div>
         </div>
 
         <div className={`${statBoxBase} bg-blue-50 border-blue-200 col-span-2`}>
           <div className="text-[11px] font-semibold text-blue-700">Low</div>
-          <div className="text-sm font-semibold text-blue-900 tabular-nums">
-            {lowRisk}
-          </div>
+          <div className="text-sm font-semibold text-blue-900 tabular-nums">{lowRisk}</div>
         </div>
       </div>
     </div>
@@ -118,7 +107,6 @@ function ProgressBar({ done, total, highRisk, mediumRisk, lowRisk }) {
 }
 
 function RiskMatrixMini() {
-  // 보기 싫다 했던 “경계 없음” 해결: cell 경계선 넣음
   const cells = [
     [{ l: 3, i: 1 }, { l: 3, i: 2 }, { l: 3, i: 3 }],
     [{ l: 2, i: 1 }, { l: 2, i: 2 }, { l: 2, i: 3 }],
@@ -133,9 +121,7 @@ function RiskMatrixMini() {
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-4">
-      <div className="text-sm font-semibold text-slate-800 mb-3">
-        정성적 위험분석 행렬 (Qualitative Risk Matrix)
-      </div>
+      <div className="text-sm font-semibold text-slate-800 mb-3">정성적 위험분석 행렬 (Qualitative Risk Matrix)</div>
 
       <div className="grid grid-cols-[160px_1fr] gap-3">
         <div />
@@ -146,13 +132,9 @@ function RiskMatrixMini() {
         </div>
 
         <div className="space-y-2 text-xs font-semibold text-slate-700">
-          <div className="h-12 flex items-center justify-end pr-2">
-            Highly Likely
-          </div>
+          <div className="h-12 flex items-center justify-end pr-2">Highly Likely</div>
           <div className="h-12 flex items-center justify-end pr-2">Likely</div>
-          <div className="h-12 flex items-center justify-end pr-2">
-            Unlikely
-          </div>
+          <div className="h-12 flex items-center justify-end pr-2">Unlikely</div>
         </div>
 
         <div className="grid grid-rows-3 gap-2">
@@ -169,9 +151,7 @@ function RiskMatrixMini() {
                     ].join(" ")}
                   >
                     <div className="text-center">
-                      <div className="text-sm font-bold text-slate-900 tabular-nums">
-                        {n}
-                      </div>
+                      <div className="text-sm font-bold text-slate-900 tabular-nums">{n}</div>
                     </div>
                   </div>
                 );
@@ -181,32 +161,20 @@ function RiskMatrixMini() {
         </div>
       </div>
 
-      <div className="mt-3 text-xs text-slate-500">
-        * Likelihood/Impact는 DB에는 1~3 정수로 저장됩니다.
-      </div>
+      <div className="mt-3 text-xs text-slate-500">* Likelihood/Impact는 DB에는 1~3 정수로 저장됩니다.</div>
     </div>
   );
 }
 
 function ResidualCard({ row, isSaving, onSave }) {
   const baseRisk = useMemo(() => {
-    const lRaw =
-      row.likelihood ??
-      row.Likelihood ??
-      row.risk_likelihood ??
-      null;
-
-    const iRaw =
-      row.impact ??
-      row.Impact ??
-      row.risk_impact ??
-      null;
+    const lRaw = row.likelihood ?? row.Likelihood ?? row.risk_likelihood ?? null;
+    const iRaw = row.impact ?? row.Impact ?? row.risk_impact ?? null;
 
     const l = lRaw == null || lRaw === "" ? null : Number(lRaw);
     const i = iRaw == null || iRaw === "" ? null : Number(iRaw);
 
     if (!Number.isFinite(l) || !Number.isFinite(i)) return null;
-
     return riskNumber(l, i);
   }, [row]);
 
@@ -223,7 +191,6 @@ function ResidualCard({ row, isSaving, onSave }) {
 
   async function handleSave() {
     const payload = {
-      // ✅ 여기서 문자열("Medium")이 절대 DB로 안 감. 항상 숫자/NULL.
       residual_likelihood: resL === "" ? null : Number(resL),
       residual_impact: resI === "" ? null : Number(resI),
       residual_detail: detail === "" ? null : detail,
@@ -266,13 +233,11 @@ function ResidualCard({ row, isSaving, onSave }) {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div>
-          <div className="text-xs font-semibold text-slate-700 mb-1">
-            Residual Likelihood
-          </div>
+          <div className="text-xs font-semibold text-slate-700 mb-1">Residual Likelihood</div>
           <select
             value={resL}
             onChange={(e) => setResL(e.target.value)}
-            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
+            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-center outline-none focus:ring-2 focus:ring-slate-200"
           >
             <option value="">선택</option>
             <option value="1">{L_LABEL[1]}</option>
@@ -282,13 +247,11 @@ function ResidualCard({ row, isSaving, onSave }) {
         </div>
 
         <div>
-          <div className="text-xs font-semibold text-slate-700 mb-1">
-            Residual Impact
-          </div>
+          <div className="text-xs font-semibold text-slate-700 mb-1">Residual Impact</div>
           <select
             value={resI}
             onChange={(e) => setResI(e.target.value)}
-            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
+            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-center outline-none focus:ring-2 focus:ring-slate-200"
           >
             <option value="">선택</option>
             <option value="1">{I_LABEL[1]}</option>
@@ -299,9 +262,7 @@ function ResidualCard({ row, isSaving, onSave }) {
       </div>
 
       <div className="space-y-1">
-        <div className="text-xs font-semibold text-slate-700">
-          잔여 위험 상세 설명
-        </div>
+        <div className="text-xs font-semibold text-slate-700">잔여 위험 상세 설명</div>
         <textarea
           value={detail}
           onChange={(e) => setDetail(e.target.value)}
@@ -323,7 +284,7 @@ function ResidualCard({ row, isSaving, onSave }) {
 export default function ResidualPanel({ checklistItems = [], onUpdated }) {
   const [typeFilter, setTypeFilter] = useState(TYPE_ALL);
   const [domainFilter, setDomainFilter] = useState("");
-  const [onlyMitigate, setOnlyMitigate] = useState(true); // 기본: 감소(감소만 잔여평가)
+  const [onlyMitigate, setOnlyMitigate] = useState(true);
   const [page, setPage] = useState(1);
   const [savingCode, setSavingCode] = useState(null);
 
@@ -340,34 +301,23 @@ export default function ResidualPanel({ checklistItems = [], onUpdated }) {
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [checklistItems, typeFilter]);
 
-  // ✅ 잔여 위험평가 대상
   const targets = useMemo(() => {
-    return checklistItems.filter((x) => {
-      // 1) 취약만
+    return (checklistItems || []).filter((x) => {
       if (safeStr(x.result).trim() !== "취약") return false;
-
-      // 2) (선택) 감소만
       if (onlyMitigate) {
         if (safeStr(x.treatment_strategy).trim() !== "감소") return false;
       }
-
-      // 3) 유형/분야 필터
       const t = normalizeType(x.type);
       if (typeFilter !== TYPE_ALL && t !== typeFilter) return false;
       if (domainFilter && safeStr(x.domain).trim() !== domainFilter) return false;
-
       return true;
     });
   }, [checklistItems, onlyMitigate, typeFilter, domainFilter]);
 
-  // ✅ 완료 기준: residual_likelihood, residual_impact 둘 다 선택됨
   const doneCount = useMemo(() => {
-    return targets.filter(
-      (x) => x.residual_likelihood != null && x.residual_impact != null
-    ).length;
+    return targets.filter((x) => x.residual_likelihood != null && x.residual_impact != null).length;
   }, [targets]);
 
-  // ✅ 분포(High/Medium/Low)
   const dist = useMemo(() => {
     let high = 0,
       med = 0,
@@ -421,78 +371,82 @@ export default function ResidualPanel({ checklistItems = [], onUpdated }) {
     setPage(1);
   }
 
+  // ✅ ChecklistPanel/StatusWritePanel과 동일 간격/스크롤 규격 적용
   return (
-    <div className="w-full max-w-none space-y-4">
-      {/* 진행률 + 매트릭스 */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-        <ProgressBar
-          done={doneCount}
-          total={targets.length}
-          highRisk={dist.high}
-          mediumRisk={dist.med}
-          lowRisk={dist.low}
-        />
-        <RiskMatrixMini />
-      </div>
+    <div className="h-[calc(100vh-180px)] flex flex-col gap-4 w-full max-w-none">
+      {/* ✅ 상단 고정 */}
+      <div className="sticky top-0 z-10 -mx-6 px-6 bg-slate-50/95 backdrop-blur pt-1">
+        <div className="space-y-4">
+          {/* 진행률 + 매트릭스 */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            <ProgressBar
+              done={doneCount}
+              total={targets.length}
+              highRisk={dist.high}
+              mediumRisk={dist.med}
+              lowRisk={dist.low}
+            />
+            <RiskMatrixMini />
+          </div>
 
-      {/* 필터 바 */}
-      <div className="rounded-2xl border border-slate-200 bg-white p-4">
-        <div className="flex items-center gap-2 flex-wrap">
-          <select
-            value={typeFilter}
-            onChange={(e) => onChangeType(e.target.value)}
-            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
-          >
-            {typeOptions.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
+          {/* 필터 바 */}
+          <div className="rounded-2xl border border-slate-200 bg-white p-4">
+            <div className="flex items-center gap-2 flex-wrap">
+              <select
+                value={typeFilter}
+                onChange={(e) => onChangeType(e.target.value)}
+                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-center outline-none focus:ring-2 focus:ring-slate-200 w-[180px]"
+              >
+                {typeOptions.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </select>
 
-          {typeFilter !== TYPE_ALL ? (
-            <select
-              value={domainFilter}
-              onChange={(e) => onChangeDomain(e.target.value)}
-              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
-            >
-              <option value="">분야(전체)</option>
-              {domainOptions.map((d) => (
-                <option key={d} value={d}>
-                  {d}
-                </option>
-              ))}
-            </select>
-          ) : null}
+              {typeFilter !== TYPE_ALL ? (
+                <select
+                  value={domainFilter}
+                  onChange={(e) => onChangeDomain(e.target.value)}
+                  className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-center outline-none focus:ring-2 focus:ring-slate-200 w-[220px]"
+                >
+                  <option value="">분야(전체)</option>
+                  {domainOptions.map((d) => (
+                    <option key={d} value={d}>
+                      {d}
+                    </option>
+                  ))}
+                </select>
+              ) : null}
 
-          <button
-            type="button"
-            onClick={onToggleOnlyMitigate}
-            className={[
-              "px-3 py-2 rounded-xl border text-sm font-semibold",
-              onlyMitigate
-                ? "bg-slate-900 text-white border-slate-900"
-                : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50",
-            ].join(" ")}
-          >
-            {onlyMitigate ? "감소만" : "전체 보기"}
-          </button>
+              <button
+                type="button"
+                onClick={onToggleOnlyMitigate}
+                className={[
+                  "px-3 py-2 rounded-xl border text-sm font-semibold",
+                  onlyMitigate
+                    ? "bg-slate-900 text-white border-slate-900"
+                    : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50",
+                ].join(" ")}
+              >
+                {onlyMitigate ? "감소만" : "전체 보기"}
+              </button>
 
-          <div className="text-sm text-slate-600 ml-auto">
-            표시 {targets.length}건 · {pageSafe}/{totalPages} 페이지
+              <div className="text-sm text-slate-600 ml-auto">
+                표시 {targets.length}건 · {pageSafe}/{totalPages} 페이지
+              </div>
+            </div>
           </div>
         </div>
+
+        {/* 고정영역 하단 경계 */}
+        <div className="mt-4 border-b border-slate-200" />
       </div>
 
-      {/* 리스트 */}
-      <div className="space-y-3">
+      {/* ✅ 아래만 스크롤 */}
+      <div className="flex-1 min-h-0 overflow-y-auto pr-1 pb-6 space-y-4">
         {paged.map((row) => (
-          <ResidualCard
-            key={row.code}
-            row={row}
-            isSaving={savingCode === row.code}
-            onSave={onSave}
-          />
+          <ResidualCard key={row.code} row={row} isSaving={savingCode === row.code} onSave={onSave} />
         ))}
 
         {paged.length === 0 ? (
@@ -503,32 +457,38 @@ export default function ResidualPanel({ checklistItems = [], onUpdated }) {
             </div>
           </div>
         ) : null}
-      </div>
 
-      {/* 페이지네이션 */}
-      {totalPages > 1 ? (
-        <div className="flex items-center justify-center gap-2 flex-wrap">
-          {Array.from({ length: totalPages }).map((_, i) => {
-            const n = i + 1;
-            const active = n === pageSafe;
-            return (
-              <button
-                key={n}
-                type="button"
-                onClick={() => setPage(n)}
-                className={[
-                  "px-3 py-1.5 rounded-xl border text-sm font-semibold",
-                  active
-                    ? "bg-slate-900 text-white border-slate-900"
-                    : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50",
-                ].join(" ")}
-              >
-                {n}
-              </button>
-            );
-          })}
-        </div>
-      ) : null}
+        {/* 페이지네이션: ChecklistPanel 스타일 카드로 통일 */}
+        {totalPages > 1 ? (
+          <div className="rounded-2xl border border-slate-200 bg-white p-4">
+            <div className="flex items-center justify-center gap-2 flex-wrap">
+              {Array.from({ length: totalPages }).map((_, i) => {
+                const n = i + 1;
+                const active = n === pageSafe;
+                return (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => setPage(n)}
+                    className={[
+                      "h-9 min-w-[36px] px-3 rounded-xl border text-sm font-semibold",
+                      active
+                        ? "bg-slate-900 text-white border-slate-900"
+                        : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50",
+                    ].join(" ")}
+                  >
+                    {n}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="mt-2 text-center text-xs text-slate-500">
+              총 {targets.length}건 · 페이지당 {PAGE_SIZE}건 · {pageSafe}/{totalPages} 페이지
+            </div>
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }

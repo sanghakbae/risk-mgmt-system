@@ -1,4 +1,4 @@
-//import React, { useMemo, useState, useEffect } from "react";
+// src/components/StatusWritePanel.jsx
 import React, { useMemo, useState, useEffect, useRef } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { updateChecklistByCode } from "../api/checklist";
@@ -33,18 +33,40 @@ function clamp(n, min, max) {
   return Math.max(min, Math.min(max, n));
 }
 
+function isImageUrl(url) {
+  const u = safeStr(url).trim().toLowerCase();
+  return /\.(png|jpg|jpeg|gif|webp|bmp|svg)(\?.*)?$/.test(u);
+}
+
+// Supabase public url에서 bucket 내 object path 뽑기
+// 예: https://xxxx.supabase.co/storage/v1/object/public/evidence/AAA/123_file.png
+function extractEvidencePathFromPublicUrl(publicUrl) {
+  const url = safeStr(publicUrl).trim();
+  if (!url) return "";
+
+  // 흔한 형태: /storage/v1/object/public/<bucket>/<path>
+  const m = url.match(/\/storage\/v1\/object\/public\/evidence\/(.+)$/);
+  if (m?.[1]) return decodeURIComponent(m[1]);
+
+  // 혹시 다른 형태가 섞여도 마지막 /evidence/ 이후를 최대한 추출
+  const idx = url.toLowerCase().indexOf("/evidence/");
+  if (idx >= 0) return decodeURIComponent(url.slice(idx + "/evidence/".length));
+
+  return "";
+}
+
 export default function StatusWritePanel({ checklistItems = [], onUpdated }) {
   const rows = useMemo(() => (Array.isArray(checklistItems) ? checklistItems : []), [checklistItems]);
 
-  // ✅ VulnIdentifyPanel 스타일: 상단 필터 상태
+  // ✅ 상단 필터 상태
   const [typeFilter, setTypeFilter] = useState("전체");
   const [domainFilter, setDomainFilter] = useState("전체");
   const [areaFilter, setAreaFilter] = useState("전체");
-  const [statusFilter, setStatusFilter] = useState("전체"); // 현황 입력 여부
+  const [statusFilter, setStatusFilter] = useState("전체"); // 입력됨/미입력
   const [keyword, setKeyword] = useState("");
 
-  // ✅ pagination
-  const pageSize = 3;
+  // ✅ pagination (요청: 최대 5개)
+  const pageSize = 5;
   const [page, setPage] = useState(1);
 
   // code별 입력값/파일 상태 관리
@@ -52,6 +74,7 @@ export default function StatusWritePanel({ checklistItems = [], onUpdated }) {
   const [fileByCode, setFileByCode] = useState(() => ({}));
   const [savingCode, setSavingCode] = useState(null);
   const [uploadingCode, setUploadingCode] = useState(null);
+  const [deletingCode, setDeletingCode] = useState(null);
 
   const textareasRef = useRef({});
 
@@ -63,11 +86,9 @@ export default function StatusWritePanel({ checklistItems = [], onUpdated }) {
 
   function setTextareaRef(code, el) {
     if (!el) return;
-    // 코드별로 ref 저장 + 초기 높이 1회 적용
     textareasRef.current[code] = el;
     autoResizeTextarea(el);
   }
-
 
   function getDraft(code, row) {
     const key = safeStr(code);
@@ -89,7 +110,7 @@ export default function StatusWritePanel({ checklistItems = [], onUpdated }) {
     setFileByCode((prev) => ({ ...prev, [key]: file || null }));
   }
 
-  // ✅ 필터 옵션(타입/도메인/영역)
+  // ✅ 옵션들
   const typeOptions = useMemo(() => {
     const set = new Set();
     for (const x of rows) {
@@ -117,80 +138,69 @@ export default function StatusWritePanel({ checklistItems = [], onUpdated }) {
     return ["전체", ...Array.from(set).sort((a, b) => a.localeCompare(b))];
   }, [rows]);
 
-  // ✅ 필터 적용된 목록
+  // ✅ 필터 적용
   const filteredRows = useMemo(() => {
     const kw = safeStr(keyword).trim().toLowerCase();
 
     return rows.filter((x) => {
-      // type
       if (typeFilter !== "전체" && normalizeType(x.type) !== typeFilter) return false;
-
-      // domain
       if (domainFilter !== "전체" && safeStr(x.domain).trim() !== domainFilter) return false;
-
-      // area
       if (areaFilter !== "전체" && safeStr(x.area).trim() !== areaFilter) return false;
 
-      // status 입력 여부
       const hasStatus = safeStr(x.status).trim().length > 0;
       if (statusFilter === "입력됨" && !hasStatus) return false;
       if (statusFilter === "미입력" && hasStatus) return false;
 
-      // keyword
-      if (kw) {
-        const hay = [
-          x.code,
-          x.itemCode,
-          x.itemcode,
-          x.domain,
-          x.area,
-          x.type,
-          x.status,
-          x.reason,
-          x.result_detail,
-        ]
-          .map((v) => safeStr(v).toLowerCase())
-          .join(" | ");
-        if (!hay.includes(kw)) return false;
-      }
+      if (!kw) return true;
 
-      return true;
+      const hay = [
+        x.code,
+        x.itemCode,
+        x.itemcode,
+        x.domain,
+        x.area,
+        x.type,
+        x.status,
+        x.reason,
+        x.result_detail,
+        x.evidence_url,
+      ]
+        .map((v) => safeStr(v).toLowerCase())
+        .join(" | ");
+
+      return hay.includes(kw);
     });
   }, [rows, typeFilter, domainFilter, areaFilter, statusFilter, keyword]);
 
-  // ✅ 페이지 수 계산 + 현재 페이지 보정
   const totalPages = useMemo(() => {
     const n = Math.ceil(filteredRows.length / pageSize);
     return n <= 0 ? 1 : n;
   }, [filteredRows.length]);
 
   useEffect(() => {
-    // 필터 바뀌면 1페이지로
     setPage(1);
   }, [typeFilter, domainFilter, areaFilter, statusFilter, keyword]);
 
   useEffect(() => {
-    // filteredRows 줄어들어 page가 넘어가면 보정
     setPage((p) => clamp(p, 1, totalPages));
   }, [totalPages]);
 
+  const pageSafe = clamp(page, 1, totalPages);
+
   const pageRows = useMemo(() => {
-    const start = (page - 1) * pageSize;
+    const start = (pageSafe - 1) * pageSize;
     return filteredRows.slice(start, start + pageSize);
-  }, [filteredRows, page]);
+  }, [filteredRows, pageSafe]);
 
-
+  // ✅ 페이지 버튼(최대 10개)
   const maxPageButtons = 10;
-
   const pageNumbers = useMemo(() => {
     const tp = totalPages || 1;
-    const cur = clamp(page, 1, tp);
+    const cur = clamp(pageSafe, 1, tp);
 
-    if (tp <= maxPageButtons) {
-      return Array.from({ length: tp }, (_, i) => i + 1);
-    }
+    if (tp <= maxPageButtons) return Array.from({ length: tp }, (_, i) => i + 1);
 
-    const half = Math.floor(maxPageButtons / 2); // 5
+    const half = Math.floor(maxPageButtons / 2);
     let start = cur - half;
     let end = start + maxPageButtons - 1;
 
@@ -204,17 +214,13 @@ export default function StatusWritePanel({ checklistItems = [], onUpdated }) {
     }
 
     return Array.from({ length: end - start + 1 }, (_, i) => start + i);
-  }, [page, totalPages]);
-
-
+  }, [pageSafe, totalPages]);
 
   async function uploadEvidenceIfAny(row) {
     const code = safeStr(row.code);
     const file = fileByCode[code];
 
-    if (!file) {
-      return safeStr(row.evidence_url || "");
-    }
+    if (!file) return safeStr(row.evidence_url || "");
 
     const safeCode = sanitizePathSegment(code);
     const safeName = sanitizeFileName(file.name);
@@ -222,25 +228,19 @@ export default function StatusWritePanel({ checklistItems = [], onUpdated }) {
 
     setUploadingCode(code);
 
-    const { error: uploadError } = await supabase.storage
-      .from("evidence")
-      .upload(filePath, file, {
-        upsert: true,
-        cacheControl: "3600",
-        contentType: file.type || "application/octet-stream",
-      });
+    const { error: uploadError } = await supabase.storage.from("evidence").upload(filePath, file, {
+      upsert: true,
+      cacheControl: "3600",
+      contentType: file.type || "application/octet-stream",
+    });
 
-    if (uploadError) {
-      throw new Error("업로드 실패: " + uploadError.message);
-    }
+    if (uploadError) throw new Error("업로드 실패: " + uploadError.message);
 
     const { data } = supabase.storage.from("evidence").getPublicUrl(filePath);
     const url = data?.publicUrl || "";
+    if (!url) throw new Error("업로드는 성공했지만 public URL 생성 실패");
 
-    if (!url) {
-      throw new Error("업로드는 성공했지만 public URL 생성 실패");
-    }
-
+    // 업로드 후 선택 파일 제거
     setFile(code, null);
     return url;
   }
@@ -270,85 +270,139 @@ export default function StatusWritePanel({ checklistItems = [], onUpdated }) {
     }
   }
 
+  // ✅ 업로드 전 선택 파일 "X" (선택 취소)
+  function clearSelectedFile(code) {
+    setFile(code, null);
+  }
+
+  // ✅ 업로드된 증적 삭제 "X" (스토리지 제거 + DB null)
+  async function deleteUploadedEvidence(row) {
+    const code = safeStr(row.code);
+    const url = safeStr(row.evidence_url).trim();
+    if (!url) return;
+
+    if (!confirm("업로드된 증적을 삭제할까요? (스토리지/DB에서 제거됩니다)")) return;
+
+    try {
+      setDeletingCode(code);
+
+      const path = extractEvidencePathFromPublicUrl(url);
+
+      // 1) Storage 파일 삭제(경로 추출 실패하면 DB만 비움)
+      if (path) {
+        const { error: rmErr } = await supabase.storage.from("evidence").remove([path]);
+        if (rmErr) throw new Error("스토리지 삭제 실패: " + rmErr.message);
+      }
+
+      // 2) DB evidence_url null
+      await updateChecklistByCode(code, { evidence_url: null });
+
+      onUpdated?.();
+      alert("증적 삭제 완료");
+    } catch (e) {
+      alert(e?.message || "삭제 실패");
+    } finally {
+      setDeletingCode(null);
+    }
+  }
+
+  // ✅ 라벨/텍스트 폰트 통일 규칙:
+  // - 질문(체크리스트 항목): bold + text-sm
+  // - 섹션 라벨(현황, 증적 업로드): bold + text-sm
+  // - 본문 텍스트: text-sm
+  const labelCls = "text-sm font-bold text-slate-900";
+  const bodyCls = "text-sm text-slate-800 whitespace-pre-wrap break-words";
+
   return (
-    <div className="space-y-4 w-full max-w-none">
-      {/* ✅ 상단 필터(= VulnIdentifyPanel 느낌으로) */}
-      <div className="rounded-2xl border border-slate-200 bg-white p-4">
-        <div className="flex items-center gap-2 flex-wrap">
-          <select
-            value={typeFilter}
-            onChange={(e) => setTypeFilter(e.target.value)}
-            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
-          >
-            {typeOptions.map((t) => (
-              <option key={t} value={t}>
-                {t === "전체" ? "유형(전체)" : t}
-              </option>
-            ))}
-          </select>
+    // ✅ 상단(필터) 고정 + 하단(리스트/페이지)만 스크롤
+    <div className="h-[calc(100vh-180px)] flex flex-col gap-4 w-full max-w-none">
+      {/* ✅ 여기까지 고정 */}
+      <div className="sticky top-0 z-10 -mx-6 px-6 bg-slate-50/95 backdrop-blur pt-1">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4">
+          <div className="flex items-center gap-2 flex-wrap">
+            <select
+              value={typeFilter}
+              onChange={(e) => setTypeFilter(e.target.value)}
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
+            >
+              {typeOptions.map((t) => (
+                <option key={t} value={t}>
+                  {t === "전체" ? "유형(전체)" : t}
+                </option>
+              ))}
+            </select>
 
-          <select
-            value={domainFilter}
-            onChange={(e) => setDomainFilter(e.target.value)}
-            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
-          >
-            {domainOptions.map((d) => (
-              <option key={d} value={d}>
-                {d === "전체" ? "도메인(전체)" : d}
-              </option>
-            ))}
-          </select>
+            <select
+              value={domainFilter}
+              onChange={(e) => setDomainFilter(e.target.value)}
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
+            >
+              {domainOptions.map((d) => (
+                <option key={d} value={d}>
+                  {d === "전체" ? "도메인(전체)" : d}
+                </option>
+              ))}
+            </select>
 
-          <select
-            value={areaFilter}
-            onChange={(e) => setAreaFilter(e.target.value)}
-            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
-          >
-            {areaOptions.map((a) => (
-              <option key={a} value={a}>
-                {a === "전체" ? "영역(전체)" : a}
-              </option>
-            ))}
-          </select>
+            <select
+              value={areaFilter}
+              onChange={(e) => setAreaFilter(e.target.value)}
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
+            >
+              {areaOptions.map((a) => (
+                <option key={a} value={a}>
+                  {a === "전체" ? "영역(전체)" : a}
+                </option>
+              ))}
+            </select>
 
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
-          >
-            <option value="전체">현황(전체)</option>
-            <option value="입력됨">현황(입력됨)</option>
-            <option value="미입력">현황(미입력)</option>
-          </select>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
+            >
+              <option value="전체">현황(전체)</option>
+              <option value="입력됨">현황(입력됨)</option>
+              <option value="미입력">현황(미입력)</option>
+            </select>
 
-          <input
-            value={keyword}
-            onChange={(e) => setKeyword(e.target.value)}
-            className="min-w-[240px] flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
-            placeholder="검색(코드/항목/현황/도메인/영역 등)"
-          />
+            <input
+              value={keyword}
+              onChange={(e) => setKeyword(e.target.value)}
+              className="min-w-[240px] flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
+              placeholder="검색(코드/항목/현황/도메인/영역 등)"
+            />
 
-          <div className="text-sm text-slate-600 ml-auto">
-            표시 {filteredRows.length}건 · {page}/{totalPages} 페이지
+            <div className="text-sm text-slate-600 ml-auto">
+              표시 {filteredRows.length}건 · {pageSafe}/{totalPages} 페이지
+            </div>
           </div>
         </div>
+
+        {/* 고정영역 하단 경계 */}
+        <div className="mt-4 border-b border-slate-200" />
       </div>
 
-      {/* ✅ 목록: 최대 3개(pageSize=3) */}
-      {pageRows.map((row) => {
-        const code = safeStr(row.code);
-        const title = `[${code}] ${safeStr(row.itemCode)}`;
+      {/* ✅ 아래만 스크롤 */}
+      <div className="flex-1 min-h-0 overflow-y-auto pr-1 pb-6 space-y-3">
+        {pageRows.map((row) => {
+          const code = safeStr(row.code);
+          const title = `[${code}] ${safeStr(row.itemCode ?? row.itemcode)}`; // ✅ 체크리스트 질문(항목)
+          const draft = getDraft(code, row);
+          const selectedFile = fileByCode[code];
+          const busy = savingCode === code || uploadingCode === code || deletingCode === code;
 
-        const draft = getDraft(code, row);
-        const selectedFile = fileByCode[code];
-        const busy = savingCode === code || uploadingCode === code;
+          const evidenceUrl = safeStr(row.evidence_url).trim();
+          const isImg = evidenceUrl && isImageUrl(evidenceUrl);
 
-        return (
-          <div key={code} className="rounded-2xl border border-slate-200 bg-white p-5 space-y-4">
-            <div className="text-sm font-semibold text-slate-900 whitespace-pre-wrap">{title}</div>
+          return (
+            <div key={code} className="rounded-2xl border border-slate-200 bg-white p-5 space-y-4">
+              {/* ✅ 체크리스트 질문: 볼드 + text-sm */}
+              <div className="text-sm font-bold text-slate-900 whitespace-pre-wrap">{title}</div>
 
-            <div className="space-y-1">
-              <div className="text-xs font-semibold text-slate-700">현황</div>
+              {/* ✅ 현황: 라벨/내용 폰트 동일 (text-sm), 라벨만 볼드 */}
+              <div className="space-y-1">
+                <div className={labelCls}>현황</div>
                 <textarea
                   ref={(el) => setTextareaRef(code, el)}
                   value={draft.status}
@@ -360,116 +414,151 @@ export default function StatusWritePanel({ checklistItems = [], onUpdated }) {
                   className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200 resize-none overflow-hidden"
                   placeholder="통제 이행 현황을 입력하세요"
                 />
-            </div>
-
-            <div className="space-y-2">
-              <div className="text-xs font-semibold text-slate-700">증적 업로드</div>
-
-              <div className="flex items-center gap-3 flex-wrap">
-                <input
-                  type="file"
-                  onChange={(e) => setFile(code, e.target.files?.[0] || null)}
-                  className="text-sm"
-                />
-
-                <div className="text-xs text-slate-500">
-                  {selectedFile ? `선택됨: ${selectedFile.name}` : "선택된 파일 없음"}
-                </div>
-
-                {row.evidence_url ? (
-                  <a
-                    href={row.evidence_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-xs text-blue-600 underline"
-                  >
-                    업로드된 증적 보기
-                  </a>
-                ) : null}
-
-                <div className="ml-auto">
-                  <Button onClick={() => handleSave(row)} disabled={busy}>
-                    {busy ? "처리 중..." : "저장"}
-                  </Button>
-                </div>
               </div>
 
-              <div className="text-xs text-slate-400">
-                * 파일을 선택한 뒤 <b>저장</b>을 누르면 업로드 + 링크 저장까지 함께 처리됩니다.
+              {/* ✅ 증적 업로드: 라벨 볼드 + text-sm */}
+              <div className="space-y-2">
+                <div className={labelCls}>증적 업로드</div>
+
+                <div className="flex items-center gap-3 flex-wrap">
+                  <input type="file" onChange={(e) => setFile(code, e.target.files?.[0] || null)} className="text-sm" />
+
+                  {/* ✅ 선택 파일 표시 + 선택 취소 X */}
+                  <div className="flex items-center gap-2">
+                    <div className="text-sm text-slate-700">
+                      {selectedFile ? `선택됨: ${selectedFile.name}` : "선택된 파일 없음"}
+                    </div>
+
+                    {selectedFile ? (
+                      <button
+                        type="button"
+                        onClick={() => clearSelectedFile(code)}
+                        className="h-6 w-6 rounded-full border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-slate-700 flex items-center justify-center"
+                        title="선택한 파일 제거"
+                      >
+                        ✕
+                      </button>
+                    ) : null}
+                  </div>
+
+                  {/* ✅ 업로드된 증적: 이미지면 썸네일 + 클릭 새탭, 아니면 링크 */}
+                  {evidenceUrl ? (
+                    <div className="flex items-center gap-2">
+                      {isImg ? (
+                        <a
+                          href={evidenceUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="block"
+                          title="원본 새 탭으로 열기"
+                        >
+                          <img
+                            src={evidenceUrl}
+                            alt="evidence"
+                            className="h-12 w-12 rounded-lg border border-slate-200 object-cover hover:opacity-90"
+                          />
+                        </a>
+                      ) : (
+                        <a
+                          href={evidenceUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-sm text-blue-600 underline"
+                        >
+                          업로드된 증적 보기
+                        </a>
+                      )}
+
+                      {/* ✅ 업로드된 증적 삭제 X */}
+                      <button
+                        type="button"
+                        onClick={() => deleteUploadedEvidence(row)}
+                        disabled={deletingCode === code}
+                        className="h-6 w-6 rounded-full border border-rose-200 text-rose-600 hover:bg-rose-50 hover:text-rose-700 flex items-center justify-center disabled:opacity-50"
+                        title="업로드된 증적 삭제"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ) : null}
+
+                  <div className="ml-auto">
+                    <Button onClick={() => handleSave(row)} disabled={busy}>
+                      {busy ? "처리 중..." : "저장"}
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="text-sm text-slate-400">
+                  * 파일을 선택한 뒤 <b>저장</b>을 누르면 업로드 + 링크 저장까지 함께 처리됩니다.
+                </div>
               </div>
             </div>
-          </div>
-        );
-      })}
-
-      {/* ✅ 페이지 번호(맨 밑) */}
-      <div className="rounded-2xl border border-slate-200 bg-white p-4">
-        <div className="flex items-center justify-center gap-2 flex-wrap">
-          <Button
-            variant="outline"
-            onClick={() => setPage((p) => clamp(p - 1, 1, totalPages))}
-            disabled={page <= 1}
-          >
-            이전
-          </Button>
-
-        {/* 첫 페이지/생략 */}
-        {totalPages > 10 && pageNumbers[0] > 1 ? (
-          <>
-            <button
-              onClick={() => setPage(1)}
-              className="h-9 min-w-[36px] px-3 rounded-xl border text-sm font-semibold bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
-            >
-              1
-            </button>
-            <span className="text-slate-400 px-1">…</span>
-          </>
-        ) : null}
-
-        {/* ✅ 최대 10개만 */}
-        {pageNumbers.map((p) => {
-          const active = p === page;
-          return (
-            <button
-              key={p}
-              onClick={() => setPage(p)}
-              className={[
-                "h-9 min-w-[36px] px-3 rounded-xl border text-sm font-semibold",
-                active
-                  ? "bg-slate-900 text-white border-slate-900"
-                  : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50",
-              ].join(" ")}
-            >
-              {p}
-            </button>
           );
         })}
 
-        {/* 마지막 페이지/생략 */}
-        {totalPages > 10 && pageNumbers[pageNumbers.length - 1] < totalPages ? (
-          <>
-            <span className="text-slate-400 px-1">…</span>
-            <button
-              onClick={() => setPage(totalPages)}
-              className="h-9 min-w-[36px] px-3 rounded-xl border text-sm font-semibold bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
-            >
-              {totalPages}
-            </button>
-          </>
+        {pageRows.length === 0 ? (
+          <div className="py-10 text-center text-sm text-slate-500">표시할 항목이 없습니다.</div>
         ) : null}
 
-          <Button
-            variant="outline"
-            onClick={() => setPage((p) => clamp(p + 1, 1, totalPages))}
-            disabled={page >= totalPages}
-          >
-            다음
-          </Button>
-        </div>
+        {/* 페이지네이션 */}
+        {totalPages > 1 ? (
+          <div className="rounded-2xl border border-slate-200 bg-white p-4">
+            <div className="flex items-center justify-center gap-2 flex-wrap">
+              <Button variant="outline" onClick={() => setPage((p) => clamp(p - 1, 1, totalPages))} disabled={pageSafe <= 1}>
+                이전
+              </Button>
 
-        <div className="mt-2 text-center text-xs text-slate-500">
-          총 {filteredRows.length}건 · 페이지당 {pageSize}건
-        </div>
+              {totalPages > 10 && pageNumbers[0] > 1 ? (
+                <>
+                  <button
+                    onClick={() => setPage(1)}
+                    className="h-9 min-w-[36px] px-3 rounded-xl border text-sm font-semibold bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                  >
+                    1
+                  </button>
+                  <span className="text-slate-400 px-1">…</span>
+                </>
+              ) : null}
+
+              {pageNumbers.map((p) => {
+                const active = p === pageSafe;
+                return (
+                  <button
+                    key={p}
+                    onClick={() => setPage(p)}
+                    className={[
+                      "h-9 min-w-[36px] px-3 rounded-xl border text-sm font-semibold",
+                      active ? "bg-slate-900 text-white border-slate-900" : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50",
+                    ].join(" ")}
+                  >
+                    {p}
+                  </button>
+                );
+              })}
+
+              {totalPages > 10 && pageNumbers[pageNumbers.length - 1] < totalPages ? (
+                <>
+                  <span className="text-slate-400 px-1">…</span>
+                  <button
+                    onClick={() => setPage(totalPages)}
+                    className="h-9 min-w-[36px] px-3 rounded-xl border text-sm font-semibold bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                  >
+                    {totalPages}
+                  </button>
+                </>
+              ) : null}
+
+              <Button variant="outline" onClick={() => setPage((p) => clamp(p + 1, 1, totalPages))} disabled={pageSafe >= totalPages}>
+                다음
+              </Button>
+            </div>
+
+            <div className="mt-2 text-center text-sm text-slate-500">
+              총 {filteredRows.length}건 · 페이지당 {pageSize}건 · {pageSafe}/{totalPages} 페이지
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>
   );

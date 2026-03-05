@@ -1,3 +1,4 @@
+// src/components/RiskTreatmentPanel.jsx
 import React, { useMemo, useState, useRef, useEffect } from "react";
 import Button from "../ui/Button";
 import { updateChecklistByCode } from "../api/checklist";
@@ -33,8 +34,15 @@ function riskNumber(l, i) {
   return map[`${l}-${i}`] ?? null;
 }
 
+function riskLevel(n) {
+  if (n == null) return "Unknown";
+  if (n <= 3) return "High";
+  if (n <= 6) return "Medium";
+  return "Low";
+}
+
 function riskLabelFromNumber(n) {
-  if (n == null) return "-";
+  if (n == null) return "Risk -";
   if (n <= 3) return `Risk ${n} · High`;
   if (n <= 6) return `Risk ${n} · Medium`;
   return `Risk ${n} · Low`;
@@ -74,16 +82,100 @@ function ProgressBar({ done, total }) {
 
 function treatmentBadge(strategy) {
   const s = safeStr(strategy).trim() || "수용";
+  if (s === "감소") return { text: "감소", cls: "bg-amber-50 text-amber-800 border-amber-200" };
+  if (s === "회피") return { text: "회피", cls: "bg-rose-50 text-rose-700 border-rose-200" };
+  if (s === "전가") return { text: "전가", cls: "bg-blue-50 text-blue-700 border-blue-200" };
+  return { text: "수용", cls: "bg-emerald-50 text-emerald-700 border-emerald-200" };
+}
 
-  if (s === "감소") return { text: "위험감소(감소)", cls: "bg-amber-50 text-amber-800 border-amber-200" };
-  if (s === "회피") return { text: "위험회피(회피)", cls: "bg-rose-50 text-rose-700 border-rose-200" };
-  if (s === "전가") return { text: "위험전가(전가)", cls: "bg-blue-50 text-blue-700 border-blue-200" };
+function StrategyGuide() {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-4">
+      <div className="flex items-center justify-between mb-3">
+        <div>
+          <div className="text-sm font-semibold text-slate-900">처리 전략 안내</div>
+          <div className="text-xs text-slate-500">위험을 어떤 방식으로 처리할지 결정합니다.</div>
+        </div>
 
-  return { text: "위험유지(수용)", cls: "bg-emerald-50 text-emerald-700 border-emerald-200" };
+        <div className="text-[11px] px-2 py-1 rounded-full border border-slate-200 bg-slate-50 text-slate-600">
+          TIP
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+          <div className="text-sm font-semibold text-emerald-900">수용 (Accept)</div>
+          <ul className="text-xs text-emerald-900 mt-1 space-y-1 list-disc pl-4">
+            <li>위험을 현재 상태로 유지</li>
+            <li>개선이 어렵거나 비용 대비 효과가 낮을 때</li>
+            <li>수용 사유 기록 권장</li>
+          </ul>
+        </div>
+
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
+          <div className="text-sm font-semibold text-amber-900">감소 (Mitigate)</div>
+          <ul className="text-xs text-amber-900 mt-1 space-y-1 list-disc pl-4">
+            <li>보안 통제로 위험 감소</li>
+            <li>가장 일반적인 대응 전략</li>
+            <li>예: 패치, 설정 변경, 접근통제</li>
+          </ul>
+        </div>
+
+        <div className="rounded-xl border border-rose-200 bg-rose-50 p-3">
+          <div className="text-sm font-semibold text-rose-900">회피 (Avoid)</div>
+          <ul className="text-xs text-rose-900 mt-1 space-y-1 list-disc pl-4">
+            <li>위험이 발생하는 기능 제거</li>
+            <li>High 위험 또는 규제 대응 시</li>
+            <li>예: 기능 비활성화, 서비스 중단</li>
+          </ul>
+        </div>
+
+        <div className="rounded-xl border border-blue-200 bg-blue-50 p-3">
+          <div className="text-sm font-semibold text-blue-900">전가 (Transfer)</div>
+          <ul className="text-xs text-blue-900 mt-1 space-y-1 list-disc pl-4">
+            <li>위험을 제3자에게 이전</li>
+            <li>책임은 계약으로 관리</li>
+            <li>예: 외주 운영, 보안관제, 보험</li>
+          </ul>
+        </div>
+      </div>
+
+      <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
+        <div className="font-semibold mb-1">작성 팁</div>
+        <div className="space-y-1">
+          <div>• High(Risk 1~3) → 감소 또는 회피 우선 검토</div>
+          <div>• 수용 선택 시 → 수용 사유 + 재평가 시점 기록</div>
+          <div>• 전가 선택 시 → 계약/SLA 근거 기록</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StatPill({ label, value, tone = "slate" }) {
+  const toneMap = {
+    slate: "bg-slate-50 border-slate-200 text-slate-700",
+    rose: "bg-rose-50 border-rose-200 text-rose-800",
+    amber: "bg-amber-50 border-amber-200 text-amber-900",
+    emerald: "bg-emerald-50 border-emerald-200 text-emerald-900",
+    blue: "bg-blue-50 border-blue-200 text-blue-900",
+  };
+
+  return (
+    <div className={["px-3 py-2 rounded-xl border text-sm flex items-center gap-2", toneMap[tone]].join(" ")}>
+      <span className="text-xs font-semibold opacity-80">{label}</span>
+      <span className="font-bold tabular-nums">{value}</span>
+    </div>
+  );
+}
+
+function autoResize(el) {
+  if (!el) return;
+  el.style.height = "auto";
+  el.style.height = `${el.scrollHeight}px`;
 }
 
 function TreatmentCard({ row, isSaving, onSave }) {
-
   const [strategy, setStrategy] = useState(safeStr(row.treatment_strategy) || "수용");
   const [acceptReason, setAcceptReason] = useState(safeStr(row.accept_reason));
   const [plan, setPlan] = useState(safeStr(row.treatment_plan));
@@ -94,19 +186,8 @@ function TreatmentCard({ row, isSaving, onSave }) {
   const planRef = useRef(null);
   const acceptRef = useRef(null);
 
-  function autoResize(el) {
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${el.scrollHeight}px`;
-  }
-
-  useEffect(() => {
-    autoResize(planRef.current);
-  }, [plan]);
-
-  useEffect(() => {
-    autoResize(acceptRef.current);
-  }, [acceptReason, strategy]);
+  useEffect(() => autoResize(planRef.current), [plan]);
+  useEffect(() => autoResize(acceptRef.current), [acceptReason, strategy]);
 
   const baseRisk = useMemo(() => {
     const l = row.likelihood == null ? null : Number(row.likelihood);
@@ -114,6 +195,8 @@ function TreatmentCard({ row, isSaving, onSave }) {
     if (!l || !i) return null;
     return riskNumber(l, i);
   }, [row.likelihood, row.impact]);
+
+  const tb = treatmentBadge(strategy);
 
   async function handleSave() {
     await onSave(row.code, {
@@ -126,27 +209,21 @@ function TreatmentCard({ row, isSaving, onSave }) {
     });
   }
 
-  const tb = treatmentBadge(strategy);
+  const metaLine = [normalizeType(row.type), safeStr(row.domain), safeStr(row.area)].filter(Boolean).join(" · ");
+  const titleText = `[${row.code}] ${safeStr(row.itemCode)}`;
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-5 space-y-4">
-
       <div className="flex items-start justify-between gap-3">
-        <div>
-          <div className="text-xs text-slate-500">
-            {normalizeType(row.type)} · {safeStr(row.domain)} · {safeStr(row.area)}
-          </div>
-
-          <div className="text-sm font-semibold text-slate-900">
-            [{row.code}] {safeStr(row.itemCode)}
-          </div>
+        <div className="min-w-0">
+          <div className="text-xs text-slate-500 truncate">{metaLine}</div>
+          <div className="text-sm font-semibold text-slate-900 mt-1 truncate">{titleText}</div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           <span className={["px-3 py-1 rounded-full border text-xs font-semibold", badgeClassFromRisk(baseRisk)].join(" ")}>
             {riskLabelFromNumber(baseRisk)}
           </span>
-
           <span className={["px-3 py-1 rounded-full border text-xs font-semibold", tb.cls].join(" ")}>
             {tb.text}
           </span>
@@ -161,14 +238,12 @@ function TreatmentCard({ row, isSaving, onSave }) {
       ) : null}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-
         <div>
           <div className="text-xs font-semibold text-slate-700 mb-1">처리 전략</div>
-
           <select
             value={strategy}
             onChange={(e) => setStrategy(e.target.value)}
-            className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+            className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm bg-white"
           >
             <option value="수용">수용</option>
             <option value="감소">감소</option>
@@ -179,11 +254,10 @@ function TreatmentCard({ row, isSaving, onSave }) {
 
         <div>
           <div className="text-xs font-semibold text-slate-700 mb-1">처리 상태</div>
-
           <select
             value={status}
             onChange={(e) => setStatus(e.target.value)}
-            className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+            className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm bg-white"
           >
             <option value="">선택</option>
             <option value="계획">계획</option>
@@ -195,17 +269,16 @@ function TreatmentCard({ row, isSaving, onSave }) {
 
         <div>
           <div className="text-xs font-semibold text-slate-700 mb-1">처리 담당</div>
-
           <input
             value={owner}
             onChange={(e) => setOwner(e.target.value)}
             className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+            placeholder="예: 홍길동"
           />
         </div>
 
         <div>
           <div className="text-xs font-semibold text-slate-700 mb-1">완료 기한</div>
-
           <input
             type="date"
             value={due}
@@ -213,14 +286,11 @@ function TreatmentCard({ row, isSaving, onSave }) {
             className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
           />
         </div>
-
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-
         <div>
           <div className="text-xs font-semibold text-slate-700 mb-1">처리 계획</div>
-
           <textarea
             ref={planRef}
             value={plan}
@@ -230,12 +300,14 @@ function TreatmentCard({ row, isSaving, onSave }) {
               autoResize(e.target);
             }}
             className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm resize-none overflow-hidden"
+            placeholder="예: 패치 적용, 접근 통제 강화, 모니터링 룰 추가..."
           />
         </div>
 
         <div>
-          <div className="text-xs font-semibold text-slate-700 mb-1">수용 사유</div>
-
+          <div className="text-xs font-semibold text-slate-700 mb-1">
+            수용 사유 <span className="text-slate-400">(수용 선택 시 필수)</span>
+          </div>
           <textarea
             ref={acceptRef}
             value={acceptReason}
@@ -245,29 +317,106 @@ function TreatmentCard({ row, isSaving, onSave }) {
               setAcceptReason(e.target.value);
               autoResize(e.target);
             }}
-            className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm resize-none overflow-hidden"
+            className={[
+              "w-full rounded-xl border px-3 py-2 text-sm resize-none overflow-hidden",
+              strategy !== "수용" ? "border-slate-200 bg-slate-50 text-slate-400" : "border-slate-200 bg-white",
+            ].join(" ")}
+            placeholder={strategy !== "수용" ? "수용 선택 시 입력 가능" : "예: 운영상 즉시 개선 어려움, 대체 통제 적용, 재평가 일정..."}
           />
         </div>
-
       </div>
 
-      <div className="flex justify-end">
+      <div className="flex items-center justify-end gap-2">
+        {isSaving ? <div className="text-xs text-slate-500">저장 중...</div> : null}
         <Button onClick={handleSave} disabled={isSaving}>
           저장
         </Button>
       </div>
-
     </div>
   );
 }
 
-export default function RiskTreatmentPanel({ checklistItems = [], onUpdated }) {
+function matchQuery(row, q) {
+  if (!q) return true;
+  const hay = [
+    safeStr(row.code),
+    safeStr(row.itemCode),
+    safeStr(row.domain),
+    safeStr(row.area),
+    safeStr(row.reason || row.result_detail),
+    safeStr(row.treatment_plan),
+    safeStr(row.treatment_owner),
+  ]
+    .join(" ")
+    .toLowerCase();
+  return hay.includes(q.toLowerCase());
+}
 
+export default function RiskTreatmentPanel({ checklistItems = [], onUpdated }) {
   const [savingCode, setSavingCode] = useState(null);
 
-  const targets = useMemo(() => {
-    return checklistItems.filter((x) => safeStr(x.result) === "취약");
+  const [q, setQ] = useState("");
+  const [riskF, setRiskF] = useState("All");
+  const [strategyF, setStrategyF] = useState("All");
+  const [statusF, setStatusF] = useState("All");
+  const [sortKey, setSortKey] = useState("risk_desc");
+
+  const targetsRaw = useMemo(() => {
+    return (checklistItems || []).filter((x) => safeStr(x.result) === "취약");
   }, [checklistItems]);
+
+  const targets = useMemo(() => {
+    return targetsRaw.map((row) => {
+      const l = row.likelihood == null ? null : Number(row.likelihood);
+      const i = row.impact == null ? null : Number(row.impact);
+      const rn = l && i ? riskNumber(l, i) : null;
+      return { ...row, _riskNumber: rn, _riskLevel: riskLevel(rn) };
+    });
+  }, [targetsRaw]);
+
+  const doneCount = useMemo(() => {
+    return targets.filter((x) => safeStr(x.treatment_strategy)).length;
+  }, [targets]);
+
+  const summary = useMemo(() => {
+    const total = targets.length;
+    const high = targets.filter((x) => x._riskLevel === "High").length;
+    const med = targets.filter((x) => x._riskLevel === "Medium").length;
+    const low = targets.filter((x) => x._riskLevel === "Low").length;
+
+    const planned = targets.filter((x) => safeStr(x.treatment_status) === "계획").length;
+    const doing = targets.filter((x) => safeStr(x.treatment_status) === "진행").length;
+    const done = targets.filter((x) => safeStr(x.treatment_status) === "완료").length;
+    const hold = targets.filter((x) => safeStr(x.treatment_status) === "보류").length;
+
+    return { total, high, med, low, planned, doing, done, hold };
+  }, [targets]);
+
+  const filtered = useMemo(() => {
+    let rows = [...targets];
+
+    if (riskF !== "All") rows = rows.filter((r) => r._riskLevel === riskF);
+    if (strategyF !== "All") rows = rows.filter((r) => safeStr(r.treatment_strategy || "수용") === strategyF);
+    if (statusF !== "All") {
+      if (statusF === "(미선택)") rows = rows.filter((r) => !safeStr(r.treatment_status));
+      else rows = rows.filter((r) => safeStr(r.treatment_status) === statusF);
+    }
+    rows = rows.filter((r) => matchQuery(r, q));
+
+    rows.sort((a, b) => {
+      if (sortKey === "risk_desc") {
+        const ar = a._riskNumber ?? 999;
+        const br = b._riskNumber ?? 999;
+        return ar - br; // 1이 가장 높음(High 우선)
+      }
+      if (sortKey === "due_asc") return safeStr(a.treatment_due_date).localeCompare(safeStr(b.treatment_due_date));
+      if (sortKey === "due_desc") return safeStr(b.treatment_due_date).localeCompare(safeStr(a.treatment_due_date));
+      if (sortKey === "code_asc") return safeStr(a.code).localeCompare(safeStr(b.code));
+      return 0;
+    });
+
+    return rows;
+  }, [targets, riskF, strategyF, statusF, q, sortKey]);
 
   async function onSave(code, payload) {
     try {
@@ -280,22 +429,126 @@ export default function RiskTreatmentPanel({ checklistItems = [], onUpdated }) {
   }
 
   return (
-    <div className="space-y-4">
+    // ✅ ChecklistPanel과 동일 규격
+    <div className="h-[calc(100vh-160px)] flex flex-col gap-4 w-full max-w-none">
+      {/* ✅ 상단 고정: ChecklistPanel과 동일 규격 */}
+      <div className={["sticky top-0 z-10", "-mx-6 px-6", "bg-slate-50/95 backdrop-blur", "pt-1"].join(" ")}>
+        <div className="space-y-4">
+          <ProgressBar done={doneCount} total={targets.length} />
 
-      <ProgressBar
-        done={targets.filter((x) => safeStr(x.treatment_strategy)).length}
-        total={targets.length}
-      />
+          <div className="rounded-2xl border border-slate-200 bg-white p-4">
+            <div className="flex items-start justify-between gap-3 flex-wrap">
+              <div>
+                <div className="text-sm font-semibold text-slate-900">취약 항목 Treatment 작업대</div>
+                <div className="text-xs text-slate-500 mt-1">
+                  필터/검색으로 우선순위를 정리하고, 처리 계획/담당/기한/상태를 기록하세요.
+                </div>
+              </div>
 
-      {targets.map((row) => (
-        <TreatmentCard
-          key={row.code}
-          row={row}
-          isSaving={savingCode === row.code}
-          onSave={onSave}
-        />
-      ))}
+              <div className="flex items-center gap-2 flex-wrap">
+                <StatPill label="TOTAL" value={summary.total} tone="slate" />
+                <StatPill label="HIGH" value={summary.high} tone="rose" />
+                <StatPill label="MED" value={summary.med} tone="amber" />
+                <StatPill label="LOW" value={summary.low} tone="blue" />
+                <StatPill label="DONE" value={doneCount} tone="emerald" />
+              </div>
+            </div>
 
+            <div className="mt-4 grid grid-cols-1 lg:grid-cols-12 gap-3">
+              <div className="lg:col-span-4">
+                <div className="text-xs font-semibold text-slate-700 mb-1">검색</div>
+                <input
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                  placeholder="코드/도메인/항목명/사유/담당/계획 검색"
+                />
+              </div>
+
+              <div className="lg:col-span-2">
+                <div className="text-xs font-semibold text-slate-700 mb-1">Risk</div>
+                <select
+                  value={riskF}
+                  onChange={(e) => setRiskF(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm bg-white"
+                >
+                  <option value="All">All</option>
+                  <option value="High">High</option>
+                  <option value="Medium">Medium</option>
+                  <option value="Low">Low</option>
+                </select>
+              </div>
+
+              <div className="lg:col-span-2">
+                <div className="text-xs font-semibold text-slate-700 mb-1">전략</div>
+                <select
+                  value={strategyF}
+                  onChange={(e) => setStrategyF(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm bg-white"
+                >
+                  <option value="All">All</option>
+                  <option value="수용">수용</option>
+                  <option value="감소">감소</option>
+                  <option value="회피">회피</option>
+                  <option value="전가">전가</option>
+                </select>
+              </div>
+
+              <div className="lg:col-span-2">
+                <div className="text-xs font-semibold text-slate-700 mb-1">상태</div>
+                <select
+                  value={statusF}
+                  onChange={(e) => setStatusF(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm bg-white"
+                >
+                  <option value="All">All</option>
+                  <option value="(미선택)">(미선택)</option>
+                  <option value="계획">계획</option>
+                  <option value="진행">진행</option>
+                  <option value="완료">완료</option>
+                  <option value="보류">보류</option>
+                </select>
+              </div>
+
+              <div className="lg:col-span-2">
+                <div className="text-xs font-semibold text-slate-700 mb-1">정렬</div>
+                <select
+                  value={sortKey}
+                  onChange={(e) => setSortKey(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm bg-white"
+                >
+                  <option value="risk_desc">Risk 우선(High 먼저)</option>
+                  <option value="due_asc">기한 임박(오름차순)</option>
+                  <option value="due_desc">기한 먼 것(내림차순)</option>
+                  <option value="code_asc">코드순</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="mt-3 text-xs text-slate-500">
+              표시 중: <span className="font-semibold text-slate-700">{filtered.length}</span> / {targets.length}
+            </div>
+          </div>
+
+          <StrategyGuide />
+        </div>
+
+        {/* ✅ 고정영역 하단 경계: ChecklistPanel과 동일 */}
+        <div className="mt-4 border-b border-slate-200" />
+      </div>
+
+      {/* ✅ 하단 스크롤: ChecklistPanel과 동일 */}
+      <div className="flex-1 min-h-0 overflow-y-auto pr-1 pb-6 space-y-4">
+        {filtered.map((row) => (
+          <TreatmentCard key={row.code} row={row} isSaving={savingCode === row.code} onSave={onSave} />
+        ))}
+
+        {filtered.length === 0 ? (
+          <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center text-sm text-slate-500">
+            조건에 맞는 항목이 없습니다. (필터/검색 조건을 조정해보세요)
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }

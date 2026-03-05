@@ -16,8 +16,6 @@ function safeStr(v) {
 function normalizeType(v) {
   const s = safeStr(v).trim();
   if (!s) return "";
-  // 기존 데이터 흔들림 보정: ISO 관련은 ISO27001로 묶되,
-  // "ISO27001" 자체가 DB에 새로 추가되면 그대로 옵션에 반영됨(자동).
   if (s.toUpperCase().includes("ISO")) return "ISO27001";
   if (s.toUpperCase().includes("ISMS")) return "ISMS";
   return s;
@@ -25,6 +23,58 @@ function normalizeType(v) {
 
 function clamp(n, min, max) {
   return Math.max(min, Math.min(max, n));
+}
+
+function isImageUrl(url) {
+  const u = safeStr(url).trim();
+  if (!u) return false;
+
+  const clean = u.split("?")[0].split("#")[0].toLowerCase();
+  return (
+    clean.endsWith(".png") ||
+    clean.endsWith(".jpg") ||
+    clean.endsWith(".jpeg") ||
+    clean.endsWith(".gif") ||
+    clean.endsWith(".webp") ||
+    clean.endsWith(".bmp") ||
+    clean.endsWith(".svg")
+  );
+}
+
+function EvidencePreview({ url }) {
+  const u = safeStr(url).trim();
+  if (!u) return null;
+
+  const img = isImageUrl(u);
+
+  return (
+    <div className="mt-3">
+      <div className="text-sm font-bold text-slate-800">증적</div>
+
+      <div className="mt-2">
+        {img ? (
+          <a href={u} target="_blank" rel="noopener noreferrer" className="inline-block">
+            <img
+              src={u}
+              alt="evidence"
+              className="h-20 w-32 rounded-xl border border-slate-200 object-cover hover:opacity-90"
+              loading="lazy"
+            />
+            <div className="mt-1 text-sm text-slate-500">클릭하면 원본 보기</div>
+          </a>
+        ) : (
+          <a
+            href={u}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+          >
+            업로드된 증적 보기
+          </a>
+        )}
+      </div>
+    </div>
+  );
 }
 
 function RowCard({ row, isSaving, onSave }) {
@@ -40,39 +90,48 @@ function RowCard({ row, isSaving, onSave }) {
 
   const statusText = safeStr(row.status ?? row.current_status ?? row.state).trim();
   const guideText = safeStr(row.guide ?? row.Guide).trim();
+  const evidenceUrl = safeStr(row.evidence_url).trim();
 
   return (
     <div className="w-full max-w-none rounded-2xl border border-slate-200 bg-white p-5 space-y-4">
+      {/* 헤더 */}
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 w-full">
-          <div className="text-xs text-slate-500">
+          <div className="text-sm text-slate-500">
             {normalizeType(row.type)} · {safeStr(row.domain)} · {safeStr(row.area)}
           </div>
 
           <div className="text-sm font-semibold text-slate-900 whitespace-pre-wrap">
             [{safeStr(row.code)}] {safeStr(row.itemCode)}
           </div>
-
-          {statusText ? (
-            <div className="mt-2 text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 whitespace-pre-wrap">
-              <span className="font-bold">현황: </span>
-              <span className="italic">{statusText}</span>
-            </div>
-          ) : null}
-
-          {guideText ? (
-            <div className="mt-2 text-sm text-sky-700 whitespace-pre-wrap">
-              <span className="font-bold">가이드: </span>
-              <span className="italic">{guideText}</span>
-            </div>
-          ) : null}
         </div>
 
-        <div className="shrink-0 text-xs text-slate-500">{isSaving ? "저장 중..." : ""}</div>
+        <div className="shrink-0 text-sm text-slate-500">{isSaving ? "저장 중..." : ""}</div>
       </div>
 
-      <div className="flex items-center gap-2">
-        <div className="text-xs font-semibold text-slate-700">결과</div>
+      {/* 가이드 */}
+      {guideText ? (
+        <div className="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2">
+          <div className="text-sm font-bold text-sky-800 mb-1">가이드</div>
+          <div className="text-sm text-sky-800 whitespace-pre-wrap break-words">{guideText}</div>
+        </div>
+      ) : null}
+
+      {/* 현황 */}
+      {statusText ? (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2">
+          <div className="text-sm font-bold text-emerald-800 mb-1">현황</div>
+          <div className="text-sm text-emerald-800 whitespace-pre-wrap break-words">{statusText}</div>
+        </div>
+      ) : null}
+
+      {/* 증적(썸네일/링크) */}
+      {evidenceUrl ? <EvidencePreview url={evidenceUrl} /> : null}
+
+      {/* 결과 라인 */}
+      <div className="flex items-center gap-3">
+        <div className="text-sm font-bold text-slate-800">결과</div>
+
         <select
           value={result}
           onChange={(e) => setResult(e.target.value)}
@@ -82,23 +141,25 @@ function RowCard({ row, isSaving, onSave }) {
           <option value="양호">양호</option>
           <option value="취약">취약</option>
         </select>
+
+        {/* ✅ 양호면 같은 라인 우측 끝에 저장 */}
+        {result === "양호" ? (
+          <div className="ml-auto">
+            <button
+              onClick={handleSave}
+              disabled={isSaving}
+              className="h-[42px] px-5 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800 disabled:opacity-50"
+            >
+              저장
+            </button>
+          </div>
+        ) : null}
       </div>
 
-      {result === "양호" ? (
-        <div className="flex justify-end">
-          <button
-            onClick={handleSave}
-            disabled={isSaving}
-            className="h-[42px] px-5 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800 disabled:opacity-50"
-          >
-            저장
-          </button>
-        </div>
-      ) : null}
-
+      {/* ✅ 취약이면 사유 + 저장 */}
       {result === "취약" ? (
-        <div className="space-y-1">
-          <div className="text-xs font-semibold text-slate-700">사유</div>
+        <div className="space-y-2">
+          <div className="text-sm font-bold text-slate-800">사유</div>
 
           <div className="flex items-end gap-3">
             <textarea
@@ -123,7 +184,6 @@ function RowCard({ row, isSaving, onSave }) {
 }
 
 export default function VulnIdentifyPanel({ checklistItems = [], onUpdated }) {
-  // ✅ Status와 동일한 필터 세트
   const [typeFilter, setTypeFilter] = useState(TYPE_ALL);
   const [domainFilter, setDomainFilter] = useState(DOMAIN_ALL);
   const [areaFilter, setAreaFilter] = useState(AREA_ALL);
@@ -133,7 +193,6 @@ export default function VulnIdentifyPanel({ checklistItems = [], onUpdated }) {
   const [page, setPage] = useState(1);
   const [savingCode, setSavingCode] = useState(null);
 
-  // ✅ 타입 옵션: 하드코딩 X → 데이터에서 자동 생성
   const typeOptions = useMemo(() => {
     const set = new Set();
     for (const x of checklistItems || []) {
@@ -143,7 +202,6 @@ export default function VulnIdentifyPanel({ checklistItems = [], onUpdated }) {
     return [TYPE_ALL, ...Array.from(set).sort((a, b) => a.localeCompare(b))];
   }, [checklistItems]);
 
-  // ✅ 도메인 옵션: 선택된 type 기준으로 자동 생성
   const domainOptions = useMemo(() => {
     const set = new Set();
     for (const x of checklistItems || []) {
@@ -155,7 +213,6 @@ export default function VulnIdentifyPanel({ checklistItems = [], onUpdated }) {
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [checklistItems, typeFilter]);
 
-  // ✅ 영역 옵션: 선택된 type/domain 기준으로 자동 생성
   const areaOptions = useMemo(() => {
     const set = new Set();
     for (const x of checklistItems || []) {
@@ -171,7 +228,6 @@ export default function VulnIdentifyPanel({ checklistItems = [], onUpdated }) {
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [checklistItems, typeFilter, domainFilter]);
 
-  // ✅ Status와 동일하게: keyword 검색(코드/항목명/가이드/현황/도메인/영역)
   const filteredRows = useMemo(() => {
     const kw = safeStr(keyword).trim().toLowerCase();
 
@@ -204,6 +260,7 @@ export default function VulnIdentifyPanel({ checklistItems = [], onUpdated }) {
         safeStr(x.guide ?? x.Guide),
         safeStr(x.status ?? x.current_status ?? x.state),
         safeStr(x.result_detail),
+        safeStr(x.evidence_url),
       ]
         .join(" ")
         .toLowerCase();
@@ -212,19 +269,16 @@ export default function VulnIdentifyPanel({ checklistItems = [], onUpdated }) {
     });
   }, [checklistItems, typeFilter, domainFilter, areaFilter, resultFilter, keyword]);
 
-  // ✅ 페이지 수 계산 + 현재 페이지 보정
   const totalPages = useMemo(() => {
     const n = Math.ceil(filteredRows.length / PAGE_SIZE);
     return n <= 0 ? 1 : n;
   }, [filteredRows.length]);
 
   useEffect(() => {
-    // 필터/검색 바뀌면 1페이지
     setPage(1);
   }, [typeFilter, domainFilter, areaFilter, resultFilter, keyword]);
 
   useEffect(() => {
-    // filteredRows 줄어들어 page가 넘어가면 보정
     setPage((p) => clamp(p, 1, totalPages));
   }, [totalPages]);
 
@@ -235,17 +289,14 @@ export default function VulnIdentifyPanel({ checklistItems = [], onUpdated }) {
     return filteredRows.slice(start, start + PAGE_SIZE);
   }, [filteredRows, pageSafe]);
 
-  // ✅ 페이지 번호 최대 10개(슬라이딩)
   const maxPageButtons = 10;
   const pageNumbers = useMemo(() => {
     const tp = totalPages || 1;
     const cur = clamp(pageSafe, 1, tp);
 
-    if (tp <= maxPageButtons) {
-      return Array.from({ length: tp }, (_, i) => i + 1);
-    }
+    if (tp <= maxPageButtons) return Array.from({ length: tp }, (_, i) => i + 1);
 
-    const half = Math.floor(maxPageButtons / 2); // 5
+    const half = Math.floor(maxPageButtons / 2);
     let start = cur - half;
     let end = start + maxPageButtons - 1;
 
@@ -257,7 +308,6 @@ export default function VulnIdentifyPanel({ checklistItems = [], onUpdated }) {
       end = tp;
       start = tp - maxPageButtons + 1;
     }
-
     return Array.from({ length: end - start + 1 }, (_, i) => start + i);
   }, [pageSafe, totalPages]);
 
@@ -274,86 +324,87 @@ export default function VulnIdentifyPanel({ checklistItems = [], onUpdated }) {
   }
 
   return (
-    <div className="w-full max-w-none space-y-4">
-      {/* ✅ Status와 동일한 필터 바(상단) */}
-      <div className="rounded-2xl border border-slate-200 bg-white p-4">
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* 유형 */}
-          <select
-            value={typeFilter}
-            onChange={(e) => {
-              setTypeFilter(e.target.value);
-              setDomainFilter("");
-              setAreaFilter("");
-            }}
-            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
-          >
-            {typeOptions.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
+    // ✅ ChecklistPanel과 동일한 높이/간격 규격
+    <div className="h-[calc(100vh-160px)] flex flex-col gap-4 w-full max-w-none">
+      {/* ✅ 상단 고정: ChecklistPanel과 동일 규격 */}
+      <div className={["sticky top-0 z-10", "-mx-6 px-6", "bg-slate-50/95 backdrop-blur", "pt-1"].join(" ")}>
+        <div className="rounded-2xl border border-slate-200 bg-white p-4">
+          <div className="flex items-center gap-2 flex-wrap">
+            <select
+              value={typeFilter}
+              onChange={(e) => {
+                setTypeFilter(e.target.value);
+                setDomainFilter("");
+                setAreaFilter("");
+              }}
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
+            >
+              {typeOptions.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
 
-          {/* 도메인 */}
-          <select
-            value={domainFilter}
-            onChange={(e) => {
-              setDomainFilter(e.target.value);
-              setAreaFilter("");
-            }}
-            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
-          >
-            <option value="">분야(전체)</option>
-            {domainOptions.map((d) => (
-              <option key={d} value={d}>
-                {d}
-              </option>
-            ))}
-          </select>
+            <select
+              value={domainFilter}
+              onChange={(e) => {
+                setDomainFilter(e.target.value);
+                setAreaFilter("");
+              }}
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
+            >
+              <option value="">분야(전체)</option>
+              {domainOptions.map((d) => (
+                <option key={d} value={d}>
+                  {d}
+                </option>
+              ))}
+            </select>
 
-          {/* 영역 */}
-          <select
-            value={areaFilter}
-            onChange={(e) => setAreaFilter(e.target.value)}
-            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
-          >
-            <option value="">영역(전체)</option>
-            {areaOptions.map((a) => (
-              <option key={a} value={a}>
-                {a}
-              </option>
-            ))}
-          </select>
+            <select
+              value={areaFilter}
+              onChange={(e) => setAreaFilter(e.target.value)}
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
+            >
+              <option value="">영역(전체)</option>
+              {areaOptions.map((a) => (
+                <option key={a} value={a}>
+                  {a}
+                </option>
+              ))}
+            </select>
 
-          {/* 결과 */}
-          <select
-            value={resultFilter}
-            onChange={(e) => setResultFilter(e.target.value)}
-            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
-          >
-            <option value="전체">결과(전체)</option>
-            <option value="취약">취약</option>
-            <option value="양호">양호</option>
-            <option value="미입력">미입력</option>
-          </select>
+            <select
+              value={resultFilter}
+              onChange={(e) => setResultFilter(e.target.value)}
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
+            >
+              <option value="전체">결과(전체)</option>
+              <option value="취약">취약</option>
+              <option value="양호">양호</option>
+              <option value="미입력">미입력</option>
+            </select>
 
-          {/* 키워드 */}
-          <input
-            value={keyword}
-            onChange={(e) => setKeyword(e.target.value)}
-            className="min-w-[220px] flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
-            placeholder="검색(코드/항목/가이드/현황/도메인/영역)"
-          />
+            <input
+              value={keyword}
+              onChange={(e) => setKeyword(e.target.value)}
+              className="min-w-[220px] flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
+              placeholder="검색(코드/항목/가이드/현황/도메인/영역/증적)"
+            />
 
-          <div className="text-sm text-slate-600 ml-auto">
-            표시 {filteredRows.length}건 · {pageSafe}/{totalPages} 페이지
+            <div className="text-sm text-slate-600 ml-auto">
+              표시 {filteredRows.length}건 · {pageSafe}/{totalPages} 페이지
+            </div>
           </div>
         </div>
+
+        {/* ✅ 고정영역 하단 경계: ChecklistPanel과 동일 */}
+        <div className="mt-4 border-b border-slate-200" />
       </div>
 
-      {/* 리스트 */}
-      <div className="space-y-3">
+      {/* ✅ 하단 스크롤 영역: ChecklistPanel과 동일 */}
+      <div className="flex-1 min-h-0 overflow-y-auto pr-1 pb-6 space-y-3">
         {paged.map((row) => (
           <RowCard key={row.code} row={row} isSaving={savingCode === row.code} onSave={onSave} />
         ))}
@@ -361,77 +412,77 @@ export default function VulnIdentifyPanel({ checklistItems = [], onUpdated }) {
         {paged.length === 0 ? (
           <div className="py-10 text-center text-sm text-slate-500">표시할 항목이 없습니다.</div>
         ) : null}
+
+        {/* 페이지네이션 */}
+        {totalPages > 1 ? (
+          <div className="rounded-2xl border border-slate-200 bg-white p-4">
+            <div className="flex items-center justify-center gap-2 flex-wrap">
+              <Button
+                variant="outline"
+                onClick={() => setPage((p) => clamp(p - 1, 1, totalPages))}
+                disabled={pageSafe <= 1}
+              >
+                이전
+              </Button>
+
+              {totalPages > 10 && pageNumbers[0] > 1 ? (
+                <>
+                  <button
+                    onClick={() => setPage(1)}
+                    className="h-9 min-w-[36px] px-3 rounded-xl border text-sm font-semibold bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                  >
+                    1
+                  </button>
+                  <span className="text-slate-400 px-1">…</span>
+                </>
+              ) : null}
+
+              {pageNumbers.map((n) => {
+                const active = n === pageSafe;
+                return (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => setPage(n)}
+                    className={[
+                      "h-9 min-w-[36px] px-3 rounded-xl border text-sm font-semibold",
+                      active
+                        ? "bg-slate-900 text-white border-slate-900"
+                        : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50",
+                    ].join(" ")}
+                  >
+                    {n}
+                  </button>
+                );
+              })}
+
+              {totalPages > 10 && pageNumbers[pageNumbers.length - 1] < totalPages ? (
+                <>
+                  <span className="text-slate-400 px-1">…</span>
+                  <button
+                    onClick={() => setPage(totalPages)}
+                    className="h-9 min-w-[36px] px-3 rounded-xl border text-sm font-semibold bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                  >
+                    {totalPages}
+                  </button>
+                </>
+              ) : null}
+
+              <Button
+                variant="outline"
+                onClick={() => setPage((p) => clamp(p + 1, 1, totalPages))}
+                disabled={pageSafe >= totalPages}
+              >
+                다음
+              </Button>
+            </div>
+
+            <div className="mt-2 text-center text-xs text-slate-500">
+              총 {filteredRows.length}건 · 페이지당 {PAGE_SIZE}건 · {pageSafe}/{totalPages} 페이지
+            </div>
+          </div>
+        ) : null}
       </div>
-
-      {/* ✅ 페이지네이션: 최대 10개만 */}
-      {totalPages > 1 ? (
-        <div className="rounded-2xl border border-slate-200 bg-white p-4">
-          <div className="flex items-center justify-center gap-2 flex-wrap">
-            <Button
-              variant="outline"
-              onClick={() => setPage((p) => clamp(p - 1, 1, totalPages))}
-              disabled={pageSafe <= 1}
-            >
-              이전
-            </Button>
-
-            {totalPages > 10 && pageNumbers[0] > 1 ? (
-              <>
-                <button
-                  onClick={() => setPage(1)}
-                  className="h-9 min-w-[36px] px-3 rounded-xl border text-sm font-semibold bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
-                >
-                  1
-                </button>
-                <span className="text-slate-400 px-1">…</span>
-              </>
-            ) : null}
-
-            {pageNumbers.map((n) => {
-              const active = n === pageSafe;
-              return (
-                <button
-                  key={n}
-                  type="button"
-                  onClick={() => setPage(n)}
-                  className={[
-                    "h-9 min-w-[36px] px-3 rounded-xl border text-sm font-semibold",
-                    active
-                      ? "bg-slate-900 text-white border-slate-900"
-                      : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50",
-                  ].join(" ")}
-                >
-                  {n}
-                </button>
-              );
-            })}
-
-            {totalPages > 10 && pageNumbers[pageNumbers.length - 1] < totalPages ? (
-              <>
-                <span className="text-slate-400 px-1">…</span>
-                <button
-                  onClick={() => setPage(totalPages)}
-                  className="h-9 min-w-[36px] px-3 rounded-xl border text-sm font-semibold bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
-                >
-                  {totalPages}
-                </button>
-              </>
-            ) : null}
-
-            <Button
-              variant="outline"
-              onClick={() => setPage((p) => clamp(p + 1, 1, totalPages))}
-              disabled={pageSafe >= totalPages}
-            >
-              다음
-            </Button>
-          </div>
-
-          <div className="mt-2 text-center text-xs text-slate-500">
-            총 {filteredRows.length}건 · 페이지당 {PAGE_SIZE}건 · {pageSafe}/{totalPages} 페이지
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }
