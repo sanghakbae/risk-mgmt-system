@@ -126,7 +126,7 @@ export default function StatusWritePanel({ checklistItems = [], onUpdated }) {
       const d = safeStr(x.domain).trim();
       if (d) set.add(d);
     }
-    return ["전체", ...Array.from(set).sort((a, b) => a.localeCompare(b))];
+    return ["전체", ...Array.from(set)];
   }, [rows]);
 
   const areaOptions = useMemo(() => {
@@ -247,24 +247,33 @@ export default function StatusWritePanel({ checklistItems = [], onUpdated }) {
 
   async function handleSave(row) {
     const code = safeStr(row.code);
+
     try {
       setSavingCode(code);
+      console.log("[SAVE] start", code);
 
       const draft = getDraft(code, row);
       const statusValue = safeStr(draft.status).trim();
+      console.log("[SAVE] draft ready", { code, statusValue });
 
+      console.log("[SAVE] before uploadEvidenceIfAny");
       const evidenceUrl = await uploadEvidenceIfAny(row);
+      console.log("[SAVE] after uploadEvidenceIfAny", evidenceUrl);
 
+      console.log("[SAVE] before updateChecklistByCode");
       await updateChecklistByCode(code, {
         status: statusValue === "" ? null : statusValue,
         evidence_url: evidenceUrl === "" ? null : evidenceUrl,
       });
+      console.log("[SAVE] after updateChecklistByCode");
 
       onUpdated?.();
       alert("저장 완료");
     } catch (e) {
+      console.error("[SAVE] error", e);
       alert(e?.message || "저장 실패");
     } finally {
+      console.log("[SAVE] finally");
       setSavingCode(null);
       setUploadingCode(null);
     }
@@ -417,7 +426,7 @@ export default function StatusWritePanel({ checklistItems = [], onUpdated }) {
               </div>
 
               {/* ✅ 증적 업로드: 라벨 볼드 + text-sm */}
-              <div className="space-y-2">
+              <div className="space-y-1">
                 <div className={labelCls}>증적 업로드</div>
 
                 <div className="flex items-center gap-3 flex-wrap">

@@ -30,13 +30,40 @@ function isImageUrl(url) {
   return /\.(png|jpg|jpeg|gif|webp|bmp|svg)(\?.*)?$/.test(u);
 }
 
-function isVulnIdentified(row) {
-  const r = safeStr(row?.result ?? row?.vulnResult).trim();
-  return r === "양호" || r === "취약";
+// 취약 식별 여부 판정
+function isTruthyVulnFlag(v) {
+  const s = safeStr(v).trim().toLowerCase();
+  return ["y", "yes", "true", "1", "취약", "vulnerable"].includes(s);
 }
 
-function getRiskBlockMessage(totalCount, doneCount) {
-  return `취약 식별 단계가 전체 완료되어야 위험도 산정을 수정할 수 있습니다. (${doneCount}/${totalCount} 완료)`;
+function isVulnerabilityIdentified(row) {
+  if (!row || typeof row !== "object") return false;
+
+  // 1) 명시적인 취약 여부 필드 우선
+  const explicitFlags = [
+    row.vulnerability,
+    row.vulnerable,
+    row.is_vulnerable,
+    row.vuln_yn,
+    row.vulnYn,
+    row.weakness_yn,
+    row.risk_target,
+  ];
+
+  if (explicitFlags.some(isTruthyVulnFlag)) {
+    return true;
+  }
+
+  // 2) 취약 식별 단계에서 들어가는 대표 텍스트 필드
+  const reasonText = safeStr(row.reason).trim();
+  const resultDetailText = safeStr(row.result_detail).trim();
+  const vulnDetailText = safeStr(row.vuln_detail ?? row.vulnerability_detail).trim();
+
+  if (reasonText || resultDetailText || vulnDetailText) {
+    return true;
+  }
+
+  return false;
 }
 
 // 회사 정책 Risk Matrix
@@ -109,7 +136,7 @@ function EvidencePreviewInline({ url }) {
   );
 }
 
-function RiskCard({ row, draft, onChangeDraft, onSave, saving, editable, blockMessage }) {
+function RiskCard({ row, draft, onChangeDraft, onSave, saving }) {
   const code = safeStr(row.code);
   const type = normalizeType(row.type);
   const domain = safeStr(row.domain);
@@ -180,21 +207,13 @@ function RiskCard({ row, draft, onChangeDraft, onSave, saving, editable, blockMe
         </div>
       ) : null}
 
-
-
       <div className="flex items-end gap-4 flex-wrap">
         <div className="min-w-[240px]">
           <div className="text-sm font-semibold text-slate-900 mb-2">Likelihood</div>
           <select
             value={draft.likelihood}
             onChange={(e) => onChangeDraft(code, { likelihood: e.target.value })}
-            disabled={!editable || saving}
-            className={[
-              "w-full rounded-xl border px-3 py-2 text-sm outline-none",
-              editable
-                ? "border-slate-200 bg-white focus:ring-2 focus:ring-slate-200"
-                : "border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed",
-            ].join(" ")}
+            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
           >
             <option value="">선택</option>
             <option value="1">{L_LABEL[1]}</option>
@@ -208,13 +227,7 @@ function RiskCard({ row, draft, onChangeDraft, onSave, saving, editable, blockMe
           <select
             value={draft.impact}
             onChange={(e) => onChangeDraft(code, { impact: e.target.value })}
-            disabled={!editable || saving}
-            className={[
-              "w-full rounded-xl border px-3 py-2 text-sm outline-none",
-              editable
-                ? "border-slate-200 bg-white focus:ring-2 focus:ring-slate-200"
-                : "border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed",
-            ].join(" ")}
+            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
           >
             <option value="">선택</option>
             <option value="1">{I_LABEL[1]}</option>
@@ -224,13 +237,11 @@ function RiskCard({ row, draft, onChangeDraft, onSave, saving, editable, blockMe
         </div>
 
         <div className="flex items-center gap-3 ml-auto">
-          <div className={`text-sm ${editable ? "text-slate-500" : "text-rose-600"}`}>
-            {editable ? "* 두 값 모두 선택 후 저장하세요." : blockMessage}
-          </div>
+          <div className="text-sm text-slate-500">* 두 값 모두 선택 후 저장하세요.</div>
 
           <Button
             onClick={() => onSave(row, draft)}
-            disabled={!editable || saving || draft.likelihood === "" || draft.impact === ""}
+            disabled={saving || draft.likelihood === "" || draft.impact === ""}
           >
             {saving ? "처리 중..." : "저장"}
           </Button>
@@ -241,10 +252,10 @@ function RiskCard({ row, draft, onChangeDraft, onSave, saving, editable, blockMe
 }
 
 export default function RiskEvaluatePanel({ checklistItems = [], onUpdated }) {
-  const rows = useMemo(
-    () => (Array.isArray(checklistItems) ? checklistItems : []),
-    [checklistItems]
-  );
+  const rows = useMemo(() => {
+    const source = Array.isArray(checklistItems) ? checklistItems : [];
+    return source.filter(isVulnerabilityIdentified);
+  }, [checklistItems]);
 
   const [draftByCode, setDraftByCode] = useState({});
   useEffect(() => {
@@ -259,15 +270,6 @@ export default function RiskEvaluatePanel({ checklistItems = [], onUpdated }) {
 
   const [page, setPage] = useState(1);
   const [savingCode, setSavingCode] = useState(null);
-
-  const totalCount = useMemo(() => rows.length, [rows]);
-
-  const vulnDoneCount = useMemo(() => {
-    return rows.filter(isVulnIdentified).length;
-  }, [rows]);
-
-  const allVulnCompleted = totalCount > 0 && totalCount === vulnDoneCount;
-  const blockMessage = getRiskBlockMessage(totalCount, vulnDoneCount);
 
   const typeOptions = useMemo(() => {
     const set = new Set();
@@ -286,7 +288,7 @@ export default function RiskEvaluatePanel({ checklistItems = [], onUpdated }) {
       const d = safeStr(x.domain).trim();
       if (d) set.add(d);
     }
-    return ["전체", ...Array.from(set)];
+    return ["전체", ...Array.from(set).sort((a, b) => a.localeCompare(b))];
   }, [rows, typeFilter]);
 
   const areaOptions = useMemo(() => {
@@ -409,11 +411,6 @@ export default function RiskEvaluatePanel({ checklistItems = [], onUpdated }) {
   }, [pageSafe, totalPages]);
 
   async function handleSave(row, draft) {
-    if (!allVulnCompleted) {
-      alert(blockMessage);
-      return;
-    }
-
     const code = safeStr(row.code);
     const l = draft.likelihood === "" ? null : Number(draft.likelihood);
     const i = draft.impact === "" ? null : Number(draft.impact);
@@ -450,20 +447,6 @@ export default function RiskEvaluatePanel({ checklistItems = [], onUpdated }) {
   return (
     <div className="h-[calc(100vh-180px)] flex flex-col gap-4 w-full max-w-none">
       <div className="sticky top-0 z-10 -mx-6 px-6 bg-slate-50/95 backdrop-blur pt-1">
-        {!allVulnCompleted ? (
-          <div className="mb-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3">
-            <div className="text-sm font-semibold text-rose-700">단계 잠금</div>
-            <div className="mt-1 text-sm text-rose-700">{blockMessage}</div>
-          </div>
-        ) : (
-          <div className="mb-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3">
-            <div className="text-sm font-semibold text-emerald-700">단계 활성화</div>
-            <div className="mt-1 text-sm text-emerald-700">
-              취약 식별 단계가 전체 완료되어 위험도 산정 입력이 가능합니다.
-            </div>
-          </div>
-        )}
-
         <div className="rounded-2xl border border-slate-200 bg-white p-4">
           <div className="flex items-center gap-2 flex-wrap">
             <select
@@ -548,14 +531,14 @@ export default function RiskEvaluatePanel({ checklistItems = [], onUpdated }) {
               onChangeDraft={(c, patch) => setDraft(c, patch)}
               onSave={handleSave}
               saving={savingCode === code}
-              editable={allVulnCompleted}
-              blockMessage={blockMessage}
             />
           );
         })}
 
         {paged.length === 0 ? (
-          <div className="py-10 text-center text-sm text-slate-500">표시할 항목이 없습니다.</div>
+          <div className="py-10 text-center text-sm text-slate-500">
+            취약점으로 식별된 항목이 없습니다.
+          </div>
         ) : null}
 
         {totalPages > 1 ? (

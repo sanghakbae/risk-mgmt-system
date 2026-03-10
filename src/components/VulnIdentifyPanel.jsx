@@ -1,4 +1,3 @@
-// src/components/VulnIdentifyPanel.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import Button from "../ui/Button";
 import { updateChecklistByCode } from "../api/checklist";
@@ -41,6 +40,14 @@ function isImageUrl(url) {
   );
 }
 
+function isStatusCompleted(row) {
+  return safeStr(row?.status ?? row?.current_status ?? row?.state).trim() !== "";
+}
+
+function getVulnBlockMessage(totalCount, doneCount) {
+  return `Status 단계가 완료되어야 취약 여부 식별이 가능합니다. (${doneCount}/${totalCount} 완료)`;
+}
+
 function EvidencePreview({ url }) {
   const u = safeStr(url).trim();
   if (!u) return null;
@@ -77,31 +84,36 @@ function EvidencePreview({ url }) {
   );
 }
 
-function RowCard({ row, isSaving, onSave }) {
-  // ✅ 기존 저장값을 초기값으로 보여주기 (안 그러면 "저장했는데 왜 선택이 비었지?"가 발생)
+function RowCard({ row, isSaving, onSave, editable, blockMessage }) {
   const [result, setResult] = useState(safeStr(row.result).trim());
   const [detail, setDetail] = useState(safeStr(row.result_detail));
 
-  // ✅ 결과를 "양호"로 바꾸면, 화면의 detail도 비워서 UX/데이터 일관성 유지
+  useEffect(() => {
+    setResult(safeStr(row.result).trim());
+    setDetail(safeStr(row.result_detail));
+  }, [row.result, row.result_detail]);
+
   useEffect(() => {
     if (result === "양호") setDetail("");
   }, [result]);
 
   async function handleSave() {
+    if (!editable) {
+      alert(blockMessage);
+      return;
+    }
+
     const r = safeStr(result).trim();
     if (!r) {
       alert("결과를 선택하세요.");
       return;
     }
 
-    // ✅ 핵심: 양호면 result_detail + reason 무조건 NULL로 초기화
     const payload =
       r === "취약"
         ? {
             result: "취약",
             result_detail: detail.trim() ? detail.trim() : null,
-            // reason 입력 UI가 없더라도, 기존 데이터가 남아있을 수 있으니 유지하거나 함께 비우고 싶으면 아래처럼 선택
-            // reason: safeStr(row.reason).trim() || null,
           }
         : {
             result: "양호",
@@ -118,7 +130,6 @@ function RowCard({ row, isSaving, onSave }) {
 
   return (
     <div className="w-full max-w-none rounded-2xl border border-slate-200 bg-white p-5 space-y-4">
-      {/* 헤더 */}
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 w-full">
           <div className="text-sm text-slate-500">
@@ -133,7 +144,6 @@ function RowCard({ row, isSaving, onSave }) {
         <div className="shrink-0 text-sm text-slate-500">{isSaving ? "저장 중..." : ""}</div>
       </div>
 
-      {/* 가이드 */}
       {guideText ? (
         <div className="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2">
           <div className="text-sm font-bold text-sky-800 mb-1">가이드</div>
@@ -141,39 +151,50 @@ function RowCard({ row, isSaving, onSave }) {
         </div>
       ) : null}
 
-      {/* 현황 */}
       {statusText ? (
         <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2">
           <div className="text-sm font-bold text-emerald-800 mb-1">현황</div>
           <div className="text-sm text-emerald-800 whitespace-pre-wrap break-words">{statusText}</div>
         </div>
-      ) : null}
+      ) : (
+        <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+          <div className="text-sm font-bold text-slate-700 mb-1">현황</div>
+          <div className="text-sm text-slate-500 whitespace-pre-wrap break-words">
+            현황 미작성
+          </div>
+        </div>
+      )}
 
-      {/* 증적 */}
       {evidenceUrl ? <EvidencePreview url={evidenceUrl} /> : null}
 
-      {/* 결과 라인 */}
+
+
       <div className="flex items-center gap-3">
         <div className="text-sm font-bold text-slate-800">결과</div>
 
         <select
           value={result}
           onChange={(e) => setResult(e.target.value)}
-          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
+          disabled={!editable || isSaving}
+          className={[
+            "rounded-xl border px-3 py-2 text-sm outline-none",
+            editable
+              ? "border-slate-200 bg-white focus:ring-2 focus:ring-slate-200"
+              : "border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed",
+          ].join(" ")}
         >
           <option value="">선택</option>
           <option value="양호">양호</option>
           <option value="취약">취약</option>
         </select>
 
-        {/* 양호 저장 버튼 */}
         {result === "양호" ? (
           <div className="ml-auto">
             <button
               type="button"
               onClick={handleSave}
-              disabled={isSaving}
-              className="h-[42px] px-5 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800 disabled:opacity-50"
+              disabled={!editable || isSaving}
+              className="h-[42px] px-5 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               저장
             </button>
@@ -181,7 +202,6 @@ function RowCard({ row, isSaving, onSave }) {
         ) : null}
       </div>
 
-      {/* 취약이면 사유(상세) + 저장 */}
       {result === "취약" ? (
         <div className="space-y-2">
           <div className="text-sm font-bold text-slate-800">사유</div>
@@ -190,15 +210,23 @@ function RowCard({ row, isSaving, onSave }) {
             <textarea
               value={detail}
               onChange={(e) => setDetail(e.target.value)}
-              placeholder="취약 판단 근거를 입력하세요"
-              className="flex-1 min-h-[140px] rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 outline-none focus:ring-2 focus:ring-rose-100"
+              disabled={!editable || isSaving}
+              placeholder={
+                editable ? "취약 판단 근거를 입력하세요" : "Status 전체 완료 후 입력 가능합니다."
+              }
+              className={[
+                "flex-1 min-h-[140px] rounded-xl px-3 py-2 text-sm outline-none",
+                editable
+                  ? "border border-rose-200 bg-rose-50 text-rose-700 focus:ring-2 focus:ring-rose-100"
+                  : "border border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed",
+              ].join(" ")}
             />
 
             <button
               type="button"
               onClick={handleSave}
-              disabled={isSaving}
-              className="h-[42px] px-5 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800 disabled:opacity-50"
+              disabled={!editable || isSaving}
+              className="h-[42px] px-5 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               저장
             </button>
@@ -219,6 +247,15 @@ export default function VulnIdentifyPanel({ checklistItems = [], onUpdated }) {
   const [page, setPage] = useState(1);
   const [savingCode, setSavingCode] = useState(null);
 
+  const totalCount = useMemo(() => (checklistItems || []).length, [checklistItems]);
+
+  const statusDoneCount = useMemo(() => {
+    return (checklistItems || []).filter(isStatusCompleted).length;
+  }, [checklistItems]);
+
+  const allStatusCompleted = totalCount > 0 && totalCount === statusDoneCount;
+  const blockMessage = getVulnBlockMessage(totalCount, statusDoneCount);
+
   const typeOptions = useMemo(() => {
     const set = new Set();
     for (const x of checklistItems || []) {
@@ -236,7 +273,7 @@ export default function VulnIdentifyPanel({ checklistItems = [], onUpdated }) {
       const d = safeStr(x.domain).trim();
       if (d) set.add(d);
     }
-    return Array.from(set).sort((a, b) => a.localeCompare(b));
+    return Array.from(set);
   }, [checklistItems, typeFilter]);
 
   const areaOptions = useMemo(() => {
@@ -339,9 +376,13 @@ export default function VulnIdentifyPanel({ checklistItems = [], onUpdated }) {
 
   async function onSave(code, patch) {
     try {
+      if (!allStatusCompleted) {
+        alert(blockMessage);
+        return;
+      }
+
       setSavingCode(code);
 
-      // ✅ undefined 제거(안전), null은 유지해야 DB에서 지워짐
       const payload = Object.fromEntries(
         Object.entries(patch || {}).filter(([, v]) => v !== undefined)
       );
@@ -358,6 +399,20 @@ export default function VulnIdentifyPanel({ checklistItems = [], onUpdated }) {
   return (
     <div className="h-[calc(100vh-160px)] flex flex-col gap-4 w-full max-w-none">
       <div className={["sticky top-0 z-10", "-mx-6 px-6", "bg-slate-50/95 backdrop-blur", "pt-1"].join(" ")}>
+        {!allStatusCompleted ? (
+          <div className="mb-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3">
+            <div className="text-sm font-semibold text-rose-700">단계 잠금</div>
+            <div className="mt-1 text-sm text-rose-700">{blockMessage}</div>
+          </div>
+        ) : (
+          <div className="mb-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+            <div className="text-sm font-semibold text-emerald-700">단계 활성화</div>
+            <div className="mt-1 text-sm text-emerald-700">
+              Status 단계가 전체 완료되어 취약 식별 입력이 가능합니다.
+            </div>
+          </div>
+        )}
+
         <div className="rounded-2xl border border-slate-200 bg-white p-4">
           <div className="flex items-center gap-2 flex-wrap">
             <select
@@ -434,7 +489,14 @@ export default function VulnIdentifyPanel({ checklistItems = [], onUpdated }) {
 
       <div className="flex-1 min-h-0 overflow-y-auto pr-1 pb-6 space-y-3">
         {paged.map((row) => (
-          <RowCard key={row.code} row={row} isSaving={savingCode === row.code} onSave={onSave} />
+          <RowCard
+            key={row.code}
+            row={row}
+            isSaving={savingCode === row.code}
+            onSave={onSave}
+            editable={allStatusCompleted}
+            blockMessage={blockMessage}
+          />
         ))}
 
         {paged.length === 0 ? (

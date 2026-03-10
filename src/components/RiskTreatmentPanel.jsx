@@ -19,6 +19,25 @@ function safeStr(v) {
   return v == null ? "" : String(v);
 }
 
+function hasStatusCompleted(row) {
+  return safeStr(row?.status ?? row?.current_status ?? row?.state).trim() !== "";
+}
+
+function hasVulnCompleted(row) {
+  const r = safeStr(row?.result ?? row?.vulnResult).trim();
+  return r === "양호" || r === "취약";
+}
+
+function hasRiskEvaluation(row) {
+  const l = safeStr(row?.likelihood).trim();
+  const i = safeStr(row?.impact).trim();
+  return l !== "" && i !== "";
+}
+
+function getTreatmentBlockMessage(totalCount, statusDoneCount, vulnDoneCount, riskDoneCount) {
+  return `Treatment 단계는 위험도 산정이 완료되어야 수정할 수 있습니다. (Risk ${riskDoneCount}/${totalCount})`;
+}
+
 function riskNumber(l, i) {
   const map = {
     "3-1": 6,
@@ -175,7 +194,7 @@ function autoResize(el) {
   el.style.height = `${el.scrollHeight}px`;
 }
 
-function TreatmentCard({ row, isSaving, onSave }) {
+function TreatmentCard({ row, isSaving, onSave, editable, blockMessage }) {
   const [strategy, setStrategy] = useState(safeStr(row.treatment_strategy) || "수용");
   const [acceptReason, setAcceptReason] = useState(safeStr(row.accept_reason));
   const [plan, setPlan] = useState(safeStr(row.treatment_plan));
@@ -185,6 +204,22 @@ function TreatmentCard({ row, isSaving, onSave }) {
 
   const planRef = useRef(null);
   const acceptRef = useRef(null);
+
+  useEffect(() => {
+    setStrategy(safeStr(row.treatment_strategy) || "수용");
+    setAcceptReason(safeStr(row.accept_reason));
+    setPlan(safeStr(row.treatment_plan));
+    setOwner(safeStr(row.treatment_owner));
+    setDue(safeStr(row.treatment_due_date));
+    setStatus(safeStr(row.treatment_status));
+  }, [
+    row.treatment_strategy,
+    row.accept_reason,
+    row.treatment_plan,
+    row.treatment_owner,
+    row.treatment_due_date,
+    row.treatment_status,
+  ]);
 
   useEffect(() => autoResize(planRef.current), [plan]);
   useEffect(() => autoResize(acceptRef.current), [acceptReason, strategy]);
@@ -199,6 +234,11 @@ function TreatmentCard({ row, isSaving, onSave }) {
   const tb = treatmentBadge(strategy);
 
   async function handleSave() {
+    if (!editable) {
+      alert(blockMessage);
+      return;
+    }
+
     await onSave(row.code, {
       treatment_strategy: strategy,
       accept_reason: strategy === "수용" ? (acceptReason === "" ? null : acceptReason) : null,
@@ -209,7 +249,9 @@ function TreatmentCard({ row, isSaving, onSave }) {
     });
   }
 
-  const metaLine = [normalizeType(row.type), safeStr(row.domain), safeStr(row.area)].filter(Boolean).join(" · ");
+  const metaLine = [normalizeType(row.type), safeStr(row.domain), safeStr(row.area)]
+    .filter(Boolean)
+    .join(" · ");
   const titleText = `[${row.code}] ${safeStr(row.itemCode)}`;
 
   return (
@@ -243,7 +285,13 @@ function TreatmentCard({ row, isSaving, onSave }) {
           <select
             value={strategy}
             onChange={(e) => setStrategy(e.target.value)}
-            className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm bg-white"
+            disabled={!editable || isSaving}
+            className={[
+              "w-full rounded-xl border px-3 py-2 text-sm",
+              editable
+                ? "border-slate-200 bg-white"
+                : "border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed",
+            ].join(" ")}
           >
             <option value="수용">수용</option>
             <option value="감소">감소</option>
@@ -257,7 +305,13 @@ function TreatmentCard({ row, isSaving, onSave }) {
           <select
             value={status}
             onChange={(e) => setStatus(e.target.value)}
-            className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm bg-white"
+            disabled={!editable || isSaving}
+            className={[
+              "w-full rounded-xl border px-3 py-2 text-sm",
+              editable
+                ? "border-slate-200 bg-white"
+                : "border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed",
+            ].join(" ")}
           >
             <option value="">선택</option>
             <option value="계획">계획</option>
@@ -272,7 +326,13 @@ function TreatmentCard({ row, isSaving, onSave }) {
           <input
             value={owner}
             onChange={(e) => setOwner(e.target.value)}
-            className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+            disabled={!editable || isSaving}
+            className={[
+              "w-full rounded-xl border px-3 py-2 text-sm",
+              editable
+                ? "border-slate-200 bg-white"
+                : "border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed",
+            ].join(" ")}
             placeholder="예: 홍길동"
           />
         </div>
@@ -283,7 +343,13 @@ function TreatmentCard({ row, isSaving, onSave }) {
             type="date"
             value={due}
             onChange={(e) => setDue(e.target.value)}
-            className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+            disabled={!editable || isSaving}
+            className={[
+              "w-full rounded-xl border px-3 py-2 text-sm",
+              editable
+                ? "border-slate-200 bg-white"
+                : "border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed",
+            ].join(" ")}
           />
         </div>
       </div>
@@ -295,11 +361,17 @@ function TreatmentCard({ row, isSaving, onSave }) {
             ref={planRef}
             value={plan}
             rows={3}
+            disabled={!editable || isSaving}
             onChange={(e) => {
               setPlan(e.target.value);
               autoResize(e.target);
             }}
-            className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm resize-none overflow-hidden"
+            className={[
+              "w-full rounded-xl border px-3 py-2 text-sm resize-none overflow-hidden",
+              editable
+                ? "border-slate-200 bg-white"
+                : "border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed",
+            ].join(" ")}
             placeholder="예: 패치 적용, 접근 통제 강화, 모니터링 룰 추가..."
           />
         </div>
@@ -312,23 +384,31 @@ function TreatmentCard({ row, isSaving, onSave }) {
             ref={acceptRef}
             value={acceptReason}
             rows={3}
-            disabled={strategy !== "수용"}
+            disabled={!editable || isSaving || strategy !== "수용"}
             onChange={(e) => {
               setAcceptReason(e.target.value);
               autoResize(e.target);
             }}
             className={[
               "w-full rounded-xl border px-3 py-2 text-sm resize-none overflow-hidden",
-              strategy !== "수용" ? "border-slate-200 bg-slate-50 text-slate-400" : "border-slate-200 bg-white",
+              !editable || strategy !== "수용"
+                ? "border-slate-200 bg-slate-50 text-slate-400 cursor-not-allowed"
+                : "border-slate-200 bg-white",
             ].join(" ")}
-            placeholder={strategy !== "수용" ? "수용 선택 시 입력 가능" : "예: 운영상 즉시 개선 어려움, 대체 통제 적용, 재평가 일정..."}
+            placeholder={
+              !editable
+                ? "선행 단계 전체 완료 후 입력 가능"
+                : strategy !== "수용"
+                  ? "수용 선택 시 입력 가능"
+                  : "예: 운영상 즉시 개선 어려움, 대체 통제 적용, 재평가 일정..."
+            }
           />
         </div>
       </div>
 
       <div className="flex items-center justify-end gap-2">
         {isSaving ? <div className="text-xs text-slate-500">저장 중...</div> : null}
-        <Button onClick={handleSave} disabled={isSaving}>
+        <Button onClick={handleSave} disabled={!editable || isSaving}>
           저장
         </Button>
       </div>
@@ -360,6 +440,33 @@ export default function RiskTreatmentPanel({ checklistItems = [], onUpdated }) {
   const [strategyF, setStrategyF] = useState("All");
   const [statusF, setStatusF] = useState("All");
   const [sortKey, setSortKey] = useState("risk_desc");
+
+  const totalCount = useMemo(() => (checklistItems || []).length, [checklistItems]);
+
+  const statusDoneCount = useMemo(() => {
+    return (checklistItems || []).filter(hasStatusCompleted).length;
+  }, [checklistItems]);
+
+  const vulnDoneCount = useMemo(() => {
+    return (checklistItems || []).filter(hasVulnCompleted).length;
+  }, [checklistItems]);
+
+  const riskDoneCount = useMemo(() => {
+    return (checklistItems || []).filter(hasRiskEvaluation).length;
+  }, [checklistItems]);
+
+  const allPrerequisitesCompleted =
+    totalCount > 0 &&
+    totalCount === statusDoneCount &&
+    totalCount === vulnDoneCount &&
+    totalCount === riskDoneCount;
+
+  const blockMessage = getTreatmentBlockMessage(
+    totalCount,
+    statusDoneCount,
+    vulnDoneCount,
+    riskDoneCount
+  );
 
   const targetsRaw = useMemo(() => {
     return (checklistItems || []).filter((x) => safeStr(x.result) === "취약");
@@ -407,7 +514,7 @@ export default function RiskTreatmentPanel({ checklistItems = [], onUpdated }) {
       if (sortKey === "risk_desc") {
         const ar = a._riskNumber ?? 999;
         const br = b._riskNumber ?? 999;
-        return ar - br; // 1이 가장 높음(High 우선)
+        return ar - br;
       }
       if (sortKey === "due_asc") return safeStr(a.treatment_due_date).localeCompare(safeStr(b.treatment_due_date));
       if (sortKey === "due_desc") return safeStr(b.treatment_due_date).localeCompare(safeStr(a.treatment_due_date));
@@ -420,6 +527,11 @@ export default function RiskTreatmentPanel({ checklistItems = [], onUpdated }) {
 
   async function onSave(code, payload) {
     try {
+      if (!allPrerequisitesCompleted) {
+        alert(blockMessage);
+        return;
+      }
+
       setSavingCode(code);
       await updateChecklistByCode(code, payload);
       onUpdated?.();
@@ -429,11 +541,23 @@ export default function RiskTreatmentPanel({ checklistItems = [], onUpdated }) {
   }
 
   return (
-    // ✅ ChecklistPanel과 동일 규격
     <div className="h-[calc(100vh-160px)] flex flex-col gap-4 w-full max-w-none">
-      {/* ✅ 상단 고정: ChecklistPanel과 동일 규격 */}
       <div className={["sticky top-0 z-10", "-mx-6 px-6", "bg-slate-50/95 backdrop-blur", "pt-1"].join(" ")}>
         <div className="space-y-4">
+          {!allPrerequisitesCompleted ? (
+            <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3">
+              <div className="text-sm font-semibold text-rose-700">단계 잠금</div>
+              <div className="mt-1 text-sm text-rose-700">{blockMessage}</div>
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+              <div className="text-sm font-semibold text-emerald-700">단계 활성화</div>
+              <div className="mt-1 text-sm text-emerald-700">
+                Status / 취약 식별 / 위험도 산정 단계가 전체 완료되어 위험 대응/조치 입력이 가능합니다.
+              </div>
+            </div>
+          )}
+
           <ProgressBar done={doneCount} total={targets.length} />
 
           <div className="rounded-2xl border border-slate-200 bg-white p-4">
@@ -533,14 +657,19 @@ export default function RiskTreatmentPanel({ checklistItems = [], onUpdated }) {
           <StrategyGuide />
         </div>
 
-        {/* ✅ 고정영역 하단 경계: ChecklistPanel과 동일 */}
         <div className="mt-4 border-b border-slate-200" />
       </div>
 
-      {/* ✅ 하단 스크롤: ChecklistPanel과 동일 */}
       <div className="flex-1 min-h-0 overflow-y-auto pr-1 pb-6 space-y-4">
         {filtered.map((row) => (
-          <TreatmentCard key={row.code} row={row} isSaving={savingCode === row.code} onSave={onSave} />
+          <TreatmentCard
+            key={row.code}
+            row={row}
+            isSaving={savingCode === row.code}
+            onSave={onSave}
+            editable={allPrerequisitesCompleted}
+            blockMessage={blockMessage}
+          />
         ))}
 
         {filtered.length === 0 ? (
