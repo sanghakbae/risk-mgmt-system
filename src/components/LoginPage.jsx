@@ -1,3 +1,4 @@
+// src/components/LoginPage.jsx
 import React, { useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 
@@ -29,7 +30,6 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-slate-50">
       <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-8 w-[360px] text-center">
         <h1 className="text-lg font-bold mb-2">위험관리 시스템 로그인</h1>
-
         <p className="text-sm text-slate-500 mb-6">Google 계정으로 로그인하세요</p>
 
         <button

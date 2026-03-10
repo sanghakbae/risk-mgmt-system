@@ -71,34 +71,46 @@ function Modal({ open, title, onClose, children, footer }) {
 }
 
 /* -----------------------------
-  Evidence (thumb/link)
+  Evidence
 ------------------------------ */
-function EvidenceInline({ url }) {
+function EvidenceBlock({ url }) {
   const u = safeStr(url).trim();
-  if (!u) return <span>—</span>;
 
-  const img = isImageUrl(u);
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white px-3 py-2">
+      <div className="text-sm font-bold text-slate-900">증적</div>
 
-  return img ? (
-    <a
-      href={u}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="inline-flex items-center gap-2"
-      title="원본 새 탭으로 열기"
-    >
-      <img
-        src={u}
-        alt="evidence"
-        className="h-10 w-10 rounded-lg border border-slate-200 object-cover hover:opacity-90"
-        loading="lazy"
-      />
-      <span className="text-xs text-blue-600 underline">원본 보기</span>
-    </a>
-  ) : (
-    <a href={u} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 underline">
-      링크
-    </a>
+      <div className="mt-1">
+        {!u ? (
+          <div className="text-sm text-slate-800 whitespace-pre-wrap break-words">—</div>
+        ) : isImageUrl(u) ? (
+          <a
+            href={u}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-3"
+            title="원본 새 탭으로 열기"
+          >
+            <img
+              src={u}
+              alt="evidence"
+              className="h-16 w-24 rounded-xl border border-slate-200 object-cover hover:opacity-90"
+              loading="lazy"
+            />
+            <span className="text-sm text-blue-600 underline">원본 보기</span>
+          </a>
+        ) : (
+          <a
+            href={u}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            업로드된 증적 보기
+          </a>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -209,9 +221,8 @@ function ReportContent({ id, vulnerableItems, summary, createdAt }) {
                   </div>
                 </div>
 
-                <div className="mt-3 text-sm text-slate-700 flex items-center gap-2">
-                  <span className="font-bold text-slate-900">증적</span>
-                  <EvidenceInline url={evidenceUrl} />
+                <div className="mt-3">
+                  <EvidenceBlock url={evidenceUrl} />
                 </div>
               </div>
             );
@@ -233,7 +244,6 @@ export default function ApprovePanel({ checklistItems = [], onUpdated, onApprove
   const [openReport, setOpenReport] = useState(false);
   const createdAt = useMemo(() => formatDateTimeNow(), []);
 
-  // 화면용 보고서 DOM ref
   const screenReportRef = useRef(null);
 
   const summary = useMemo(() => {
@@ -323,10 +333,8 @@ export default function ApprovePanel({ checklistItems = [], onUpdated, onApprove
         }
       `}</style>
 
-      {/* ✅ 상단 고정: 다른 패널과 동일한 패턴 */}
       <div className="sticky top-0 z-10 -mx-6 px-6 bg-slate-50/95 backdrop-blur pt-1">
         <div className="space-y-4">
-          {/* Action bar */}
           <div className="rounded-2xl border border-slate-200 bg-white p-4">
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <div className="min-w-0">
@@ -348,7 +356,6 @@ export default function ApprovePanel({ checklistItems = [], onUpdated, onApprove
             </div>
           </div>
 
-          {/* Summary */}
           <div className="rounded-2xl border border-slate-200 bg-white p-4">
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <div className="text-sm font-semibold text-slate-900">결과 요약</div>
@@ -368,7 +375,6 @@ export default function ApprovePanel({ checklistItems = [], onUpdated, onApprove
             </div>
           </div>
 
-          {/* Header line for list */}
           <div className="rounded-2xl border border-slate-200 bg-white p-4">
             <div className="flex items-end justify-between gap-3 flex-wrap">
               <div>
@@ -383,7 +389,6 @@ export default function ApprovePanel({ checklistItems = [], onUpdated, onApprove
         <div className="mt-4 border-b border-slate-200" />
       </div>
 
-      {/* ✅ 하단만 스크롤 */}
       <div className="flex-1 min-h-0 overflow-y-auto space-y-3 pr-1 pb-6">
         {vulnerableItems.map((row) => {
           const code = safeStr(row.code);
@@ -430,10 +435,7 @@ export default function ApprovePanel({ checklistItems = [], onUpdated, onApprove
                 </div>
               </div>
 
-              <div className="text-sm text-slate-700 flex items-center gap-2">
-                <span className="font-bold text-slate-900">증적</span>
-                <EvidenceInline url={evidenceUrl} />
-              </div>
+              <EvidenceBlock url={evidenceUrl} />
             </div>
           );
         })}
@@ -442,7 +444,6 @@ export default function ApprovePanel({ checklistItems = [], onUpdated, onApprove
           <div className="py-10 text-center text-sm text-slate-500">취약 항목이 없습니다.</div>
         ) : null}
 
-        {/* ✅ 화면용 모달(미리보기) */}
         <Modal
           open={openReport}
           title="체크리스트 기반 위험평가 결과보고서"

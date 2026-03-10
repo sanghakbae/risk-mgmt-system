@@ -1,5 +1,5 @@
 // src/components/ResidualPanel.jsx
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import Button from "../ui/Button";
 import { updateChecklistByCode } from "../api/checklist";
 
@@ -16,15 +16,49 @@ function normalizeType(v) {
   if (s.toUpperCase().includes("ISMS")) return TYPE_ISMS;
   return s;
 }
+
 function safeStr(v) {
   return v == null ? "" : String(v);
 }
 
-// ✅ UI 표기(문자열) ↔ DB 저장값(숫자) 매핑
+function hasStatusCompleted(row) {
+  return safeStr(row?.status ?? row?.current_status ?? row?.state).trim() !== "";
+}
+
+function hasVulnCompleted(row) {
+  const r = safeStr(row?.result ?? row?.vulnResult).trim();
+  return r === "양호" || r === "취약";
+}
+
+function hasRiskEvaluation(row) {
+  const l = safeStr(row?.likelihood).trim();
+  const i = safeStr(row?.impact).trim();
+  return l !== "" && i !== "";
+}
+
+function hasTreatmentCompleted(row) {
+  const strategy = safeStr(row?.treatment_strategy).trim();
+  const status = safeStr(row?.treatment_status).trim();
+  const plan = safeStr(row?.treatment_plan).trim();
+  const owner = safeStr(row?.treatment_owner).trim();
+  const due = safeStr(row?.treatment_due_date).trim();
+  const acceptReason = safeStr(row?.accept_reason).trim();
+
+  if (!strategy || !status || !plan || !owner || !due) return false;
+  if (strategy === "수용" && !acceptReason) return false;
+
+  return true;
+}
+
+function getResidualBlockMessage(totalCount, statusDoneCount, vulnDoneCount, riskDoneCount, treatmentDoneCount) {
+  return `잔여 위험 재평가는 위험 대응·조치가 완료되어야 수행할 수 있습니다. (Treatment ${treatmentDoneCount}/${totalCount})`;
+}
+
+// UI 표기(문자열) ↔ DB 저장값(숫자) 매핑
 const L_LABEL = { 1: "Unlikely", 2: "Likely", 3: "Highly Likely" };
 const I_LABEL = { 1: "Low", 2: "Medium", 3: "High" };
 
-// ✅ 회사 정책 Risk Matrix(스크린샷 동일)
+// 회사 정책 Risk Matrix
 function riskNumber(l, i) {
   const map = {
     "3-1": 6,
@@ -166,7 +200,7 @@ function RiskMatrixMini() {
   );
 }
 
-function ResidualCard({ row, isSaving, onSave }) {
+function ResidualCard({ row, isSaving, onSave, editable, blockMessage }) {
   const baseRisk = useMemo(() => {
     const lRaw = row.likelihood ?? row.Likelihood ?? row.risk_likelihood ?? null;
     const iRaw = row.impact ?? row.Impact ?? row.risk_impact ?? null;
@@ -182,6 +216,12 @@ function ResidualCard({ row, isSaving, onSave }) {
   const [resI, setResI] = useState(row.residual_impact ?? "");
   const [detail, setDetail] = useState(safeStr(row.residual_detail));
 
+  useEffect(() => {
+    setResL(row.residual_likelihood ?? "");
+    setResI(row.residual_impact ?? "");
+    setDetail(safeStr(row.residual_detail));
+  }, [row.residual_likelihood, row.residual_impact, row.residual_detail]);
+
   const residualRisk = useMemo(() => {
     const l = resL === "" ? null : Number(resL);
     const i = resI === "" ? null : Number(resI);
@@ -190,6 +230,11 @@ function ResidualCard({ row, isSaving, onSave }) {
   }, [resL, resI]);
 
   async function handleSave() {
+    if (!editable) {
+      alert(blockMessage);
+      return;
+    }
+
     const payload = {
       residual_likelihood: resL === "" ? null : Number(resL),
       residual_impact: resI === "" ? null : Number(resI),
@@ -237,7 +282,13 @@ function ResidualCard({ row, isSaving, onSave }) {
           <select
             value={resL}
             onChange={(e) => setResL(e.target.value)}
-            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-center outline-none focus:ring-2 focus:ring-slate-200"
+            disabled={!editable || isSaving}
+            className={[
+              "w-full rounded-xl border px-3 py-2 text-sm text-center outline-none",
+              editable
+                ? "border-slate-200 bg-white focus:ring-2 focus:ring-slate-200"
+                : "border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed",
+            ].join(" ")}
           >
             <option value="">선택</option>
             <option value="1">{L_LABEL[1]}</option>
@@ -251,7 +302,13 @@ function ResidualCard({ row, isSaving, onSave }) {
           <select
             value={resI}
             onChange={(e) => setResI(e.target.value)}
-            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-center outline-none focus:ring-2 focus:ring-slate-200"
+            disabled={!editable || isSaving}
+            className={[
+              "w-full rounded-xl border px-3 py-2 text-sm text-center outline-none",
+              editable
+                ? "border-slate-200 bg-white focus:ring-2 focus:ring-slate-200"
+                : "border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed",
+            ].join(" ")}
           >
             <option value="">선택</option>
             <option value="1">{I_LABEL[1]}</option>
@@ -266,14 +323,20 @@ function ResidualCard({ row, isSaving, onSave }) {
         <textarea
           value={detail}
           onChange={(e) => setDetail(e.target.value)}
-          className="w-full min-h-[140px] rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
-          placeholder="조치 후 남는 위험에 대한 설명을 입력하세요"
+          disabled={!editable || isSaving}
+          className={[
+            "w-full min-h-[140px] rounded-xl border px-3 py-2 text-sm outline-none",
+            editable
+              ? "border-slate-200 bg-white focus:ring-2 focus:ring-slate-200"
+              : "border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed",
+          ].join(" ")}
+          placeholder={!editable ? "선행 단계 전체 완료 후 입력 가능" : "조치 후 남는 위험에 대한 설명을 입력하세요"}
         />
       </div>
 
       <div className="flex items-center justify-between">
         <div className="text-xs text-slate-500">{isSaving ? "저장 중..." : ""}</div>
-        <Button onClick={handleSave} disabled={isSaving}>
+        <Button onClick={handleSave} disabled={!editable || isSaving}>
           저장
         </Button>
       </div>
@@ -288,6 +351,39 @@ export default function ResidualPanel({ checklistItems = [], onUpdated }) {
   const [page, setPage] = useState(1);
   const [savingCode, setSavingCode] = useState(null);
 
+  const totalCount = useMemo(() => (checklistItems || []).length, [checklistItems]);
+
+  const statusDoneCount = useMemo(() => {
+    return (checklistItems || []).filter(hasStatusCompleted).length;
+  }, [checklistItems]);
+
+  const vulnDoneCount = useMemo(() => {
+    return (checklistItems || []).filter(hasVulnCompleted).length;
+  }, [checklistItems]);
+
+  const riskDoneCount = useMemo(() => {
+    return (checklistItems || []).filter(hasRiskEvaluation).length;
+  }, [checklistItems]);
+
+  const treatmentDoneCount = useMemo(() => {
+    return (checklistItems || []).filter(hasTreatmentCompleted).length;
+  }, [checklistItems]);
+
+  const allPrerequisitesCompleted =
+    totalCount > 0 &&
+    totalCount === statusDoneCount &&
+    totalCount === vulnDoneCount &&
+    totalCount === riskDoneCount &&
+    totalCount === treatmentDoneCount;
+
+  const blockMessage = getResidualBlockMessage(
+    totalCount,
+    statusDoneCount,
+    vulnDoneCount,
+    riskDoneCount,
+    treatmentDoneCount
+  );
+
   const typeOptions = useMemo(() => [TYPE_ALL, TYPE_ISMS, TYPE_ISO], []);
 
   const domainOptions = useMemo(() => {
@@ -298,15 +394,14 @@ export default function ResidualPanel({ checklistItems = [], onUpdated }) {
       const d = safeStr(x.domain).trim();
       if (d) set.add(d);
     }
-    return Array.from(set).sort((a, b) => a.localeCompare(b));
+    return Array.from(set);
   }, [checklistItems, typeFilter]);
 
   const targets = useMemo(() => {
     return (checklistItems || []).filter((x) => {
       if (safeStr(x.result).trim() !== "취약") return false;
-      if (onlyMitigate) {
-        if (safeStr(x.treatment_strategy).trim() !== "감소") return false;
-      }
+      if (onlyMitigate && safeStr(x.treatment_strategy).trim() !== "감소") return false;
+
       const t = normalizeType(x.type);
       if (typeFilter !== TYPE_ALL && t !== typeFilter) return false;
       if (domainFilter && safeStr(x.domain).trim() !== domainFilter) return false;
@@ -319,19 +414,23 @@ export default function ResidualPanel({ checklistItems = [], onUpdated }) {
   }, [targets]);
 
   const dist = useMemo(() => {
-    let high = 0,
-      med = 0,
-      low = 0;
+    let high = 0;
+    let med = 0;
+    let low = 0;
+
     for (const x of targets) {
       const l = x.residual_likelihood == null ? null : Number(x.residual_likelihood);
       const i = x.residual_impact == null ? null : Number(x.residual_impact);
       if (!l || !i) continue;
+
       const n = riskNumber(l, i);
       if (n == null) continue;
+
       if (n <= 3) high += 1;
       else if (n <= 6) med += 1;
       else low += 1;
     }
+
     return { high, med, low };
   }, [targets]);
 
@@ -345,6 +444,11 @@ export default function ResidualPanel({ checklistItems = [], onUpdated }) {
 
   async function onSave(code, payload) {
     try {
+      if (!allPrerequisitesCompleted) {
+        alert(blockMessage);
+        return;
+      }
+
       setSavingCode(code);
       await updateChecklistByCode(code, payload);
       onUpdated?.();
@@ -371,13 +475,24 @@ export default function ResidualPanel({ checklistItems = [], onUpdated }) {
     setPage(1);
   }
 
-  // ✅ ChecklistPanel/StatusWritePanel과 동일 간격/스크롤 규격 적용
   return (
     <div className="h-[calc(100vh-180px)] flex flex-col gap-4 w-full max-w-none">
-      {/* ✅ 상단 고정 */}
       <div className="sticky top-0 z-10 -mx-6 px-6 bg-slate-50/95 backdrop-blur pt-1">
         <div className="space-y-4">
-          {/* 진행률 + 매트릭스 */}
+          {!allPrerequisitesCompleted ? (
+            <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3">
+              <div className="text-sm font-semibold text-rose-700">단계 잠금</div>
+              <div className="mt-1 text-sm text-rose-700">{blockMessage}</div>
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+              <div className="text-sm font-semibold text-emerald-700">단계 활성화</div>
+              <div className="mt-1 text-sm text-emerald-700">
+                Status / 취약 식별 / 위험도 산정 / 위험 대응·조치 단계가 전체 완료되어 잔여 위험 재평가 입력이 가능합니다.
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
             <ProgressBar
               done={doneCount}
@@ -389,7 +504,6 @@ export default function ResidualPanel({ checklistItems = [], onUpdated }) {
             <RiskMatrixMini />
           </div>
 
-          {/* 필터 바 */}
           <div className="rounded-2xl border border-slate-200 bg-white p-4">
             <div className="flex items-center gap-2 flex-wrap">
               <select
@@ -439,14 +553,19 @@ export default function ResidualPanel({ checklistItems = [], onUpdated }) {
           </div>
         </div>
 
-        {/* 고정영역 하단 경계 */}
         <div className="mt-4 border-b border-slate-200" />
       </div>
 
-      {/* ✅ 아래만 스크롤 */}
       <div className="flex-1 min-h-0 overflow-y-auto pr-1 pb-6 space-y-4">
         {paged.map((row) => (
-          <ResidualCard key={row.code} row={row} isSaving={savingCode === row.code} onSave={onSave} />
+          <ResidualCard
+            key={row.code}
+            row={row}
+            isSaving={savingCode === row.code}
+            onSave={onSave}
+            editable={allPrerequisitesCompleted}
+            blockMessage={blockMessage}
+          />
         ))}
 
         {paged.length === 0 ? (
@@ -458,7 +577,6 @@ export default function ResidualPanel({ checklistItems = [], onUpdated }) {
           </div>
         ) : null}
 
-        {/* 페이지네이션: ChecklistPanel 스타일 카드로 통일 */}
         {totalPages > 1 ? (
           <div className="rounded-2xl border border-slate-200 bg-white p-4">
             <div className="flex items-center justify-center gap-2 flex-wrap">
