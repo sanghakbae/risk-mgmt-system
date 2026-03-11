@@ -1,4 +1,3 @@
-// src/components/ChecklistPanel.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Download, Upload } from "lucide-react";
 import Papa from "papaparse";
@@ -36,13 +35,41 @@ function sanitizeFileName(name) {
   return s.replace(/[^a-zA-Z0-9._-]/g, "_");
 }
 
+function compareCode(a, b) {
+  const aa = safeStr(a).split(".").map((x) => Number(x));
+  const bb = safeStr(b).split(".").map((x) => Number(x));
+  const len = Math.max(aa.length, bb.length);
+
+  for (let i = 0; i < len; i += 1) {
+    const av = Number.isFinite(aa[i]) ? aa[i] : -1;
+    const bv = Number.isFinite(bb[i]) ? bb[i] : -1;
+    if (av !== bv) return av - bv;
+  }
+  return safeStr(a).localeCompare(safeStr(b));
+}
+
+function buildOrderedUniqueOptions(rows, valueGetter) {
+  const sorted = [...rows].sort((a, b) => compareCode(a.code, b.code));
+  const seen = new Set();
+  const out = [];
+
+  for (const row of sorted) {
+    const value = safeStr(valueGetter(row)).trim();
+    if (!value || seen.has(value)) continue;
+    seen.add(value);
+    out.push(value);
+  }
+
+  return out;
+}
+
 export default function ChecklistPanel({ checklistItems = [] }) {
   const rows = useMemo(() => (Array.isArray(checklistItems) ? checklistItems : []), [checklistItems]);
 
-  // ✅ Status 스타일 필터 세트
+  // ✅ 필터: 유형 → 영역 → 도메인
   const [typeFilter, setTypeFilter] = useState("전체");
-  const [domainFilter, setDomainFilter] = useState("전체");
   const [areaFilter, setAreaFilter] = useState("전체");
+  const [domainFilter, setDomainFilter] = useState("전체");
   const [keyword, setKeyword] = useState("");
 
   // ✅ pagination
@@ -52,55 +79,51 @@ export default function ChecklistPanel({ checklistItems = [] }) {
   const fileInputRef = useRef(null);
   const [importing, setImporting] = useState(false);
 
-  // ✅ 테이블 컬럼
+  // ✅ 테이블 컬럼: 유형 → 영역 → 도메인
   const cols = useMemo(
     () => [
       { key: "type", label: "유형" },
-      { key: "domain", label: "도메인" },
       { key: "area", label: "영역" },
+      { key: "domain", label: "도메인" },
       { key: "code", label: "코드" },
-      { key: "itemCode", label: "항목" }, // 줄바꿈 허용
+      { key: "itemCode", label: "항목" },
     ],
     []
   );
 
   // ----------------------------
-  // Options (데이터 기반 자동 생성)
+  // Options (코드 순서 기준 첫 등장 순서)
   // ----------------------------
   const typeOptions = useMemo(() => {
-    const set = new Set();
-    for (const x of rows) {
-      const t = normalizeType(x.type);
-      if (t) set.add(t);
-    }
-    return ["전체", ...Array.from(set).sort((a, b) => a.localeCompare(b))];
+    const types = buildOrderedUniqueOptions(rows, (x) => normalizeType(x.type));
+    return ["전체", ...types];
   }, [rows]);
 
-  const domainOptions = useMemo(() => {
-    const set = new Set();
-    for (const x of rows) {
+  const areaOptions = useMemo(() => {
+    const scoped = rows.filter((x) => {
       const t = normalizeType(x.type);
-      if (typeFilter !== "전체" && t !== typeFilter) continue;
-      const d = safeStr(x.domain).trim();
-      if (d) set.add(d);
-    }
-    return ["전체", ...Array.from(set).sort((a, b) => a.localeCompare(b))];
+      if (typeFilter !== "전체" && t !== typeFilter) return false;
+      return true;
+    });
+
+    const areas = buildOrderedUniqueOptions(scoped, (x) => x.area);
+    return ["전체", ...areas];
   }, [rows, typeFilter]);
 
-  const areaOptions = useMemo(() => {
-    const set = new Set();
-    for (const x of rows) {
+  const domainOptions = useMemo(() => {
+    const scoped = rows.filter((x) => {
       const t = normalizeType(x.type);
-      if (typeFilter !== "전체" && t !== typeFilter) continue;
-
-      const d = safeStr(x.domain).trim();
-      if (domainFilter !== "전체" && d !== domainFilter) continue;
+      if (typeFilter !== "전체" && t !== typeFilter) return false;
 
       const a = safeStr(x.area).trim();
-      if (a) set.add(a);
-    }
-    return ["전체", ...Array.from(set).sort((a, b) => a.localeCompare(b))];
-  }, [rows, typeFilter, domainFilter]);
+      if (areaFilter !== "전체" && a !== areaFilter) return false;
+
+      return true;
+    });
+
+    const domains = buildOrderedUniqueOptions(scoped, (x) => x.domain);
+    return ["전체", ...domains];
+  }, [rows, typeFilter, areaFilter]);
 
   // ----------------------------
   // Live Filter (입력 즉시 반영)
@@ -112,11 +135,11 @@ export default function ChecklistPanel({ checklistItems = [] }) {
       const t = normalizeType(x.type);
       if (typeFilter !== "전체" && t !== typeFilter) return false;
 
-      const d = safeStr(x.domain).trim();
-      if (domainFilter !== "전체" && d !== domainFilter) return false;
-
       const a = safeStr(x.area).trim();
       if (areaFilter !== "전체" && a !== areaFilter) return false;
+
+      const d = safeStr(x.domain).trim();
+      if (domainFilter !== "전체" && d !== domainFilter) return false;
 
       if (!kw) return true;
 
@@ -136,12 +159,12 @@ export default function ChecklistPanel({ checklistItems = [] }) {
 
       return hay.includes(kw);
     });
-  }, [rows, typeFilter, domainFilter, areaFilter, keyword]);
+  }, [rows, typeFilter, areaFilter, domainFilter, keyword]);
 
   // ✅ 필터 변경 시 1페이지로
   useEffect(() => {
     setPage(1);
-  }, [typeFilter, domainFilter, areaFilter, keyword]);
+  }, [typeFilter, areaFilter, domainFilter, keyword]);
 
   const totalPages = useMemo(() => {
     const n = Math.ceil(filteredRows.length / PAGE_SIZE);
@@ -239,7 +262,6 @@ export default function ChecklistPanel({ checklistItems = [] }) {
     delete out.id;
     delete out.created_at;
 
-    // itemCode -> itemcode (DB 컬럼명)
     if (out.itemCode != null && out.itemcode == null) {
       out.itemcode = out.itemCode;
       delete out.itemCode;
@@ -255,7 +277,6 @@ export default function ChecklistPanel({ checklistItems = [] }) {
       if (key in out) out[key] = toInt(out[key]);
     }
 
-    // type normalize
     if (out.type != null) out.type = normalizeType(out.type);
 
     return out;
@@ -324,12 +345,9 @@ export default function ChecklistPanel({ checklistItems = [] }) {
   }
 
   return (
-    // ✅ Status/RiskEval과 동일한 레이아웃: 상단(고정) + 하단(스크롤)
     <div className="h-[calc(100vh-160px)] flex flex-col gap-4 w-full max-w-none">
-      {/* ✅ 상단 고정(간격/배경/보더 통일) */}
       <div className={["sticky top-0 z-10", "-mx-6 px-6", "bg-slate-50/95 backdrop-blur", "pt-1"].join(" ")}>
         <div className="space-y-4">
-          {/* Top bar */}
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div className="text-sm text-slate-600">통제 항목 관리 (필터/검색 실시간 + CSV Export/Import)</div>
 
@@ -351,15 +369,14 @@ export default function ChecklistPanel({ checklistItems = [] }) {
             </div>
           </div>
 
-          {/* Filter row (Status 스타일) */}
           <div className="rounded-2xl border border-slate-200 bg-white p-4">
             <div className="flex items-center gap-2 flex-wrap">
               <select
                 value={typeFilter}
                 onChange={(e) => {
                   setTypeFilter(e.target.value);
-                  setDomainFilter("전체");
                   setAreaFilter("전체");
+                  setDomainFilter("전체");
                 }}
                 className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
               >
@@ -371,28 +388,28 @@ export default function ChecklistPanel({ checklistItems = [] }) {
               </select>
 
               <select
-                value={domainFilter}
-                onChange={(e) => {
-                  setDomainFilter(e.target.value);
-                  setAreaFilter("전체");
-                }}
-                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
-              >
-                {domainOptions.map((d) => (
-                  <option key={d} value={d}>
-                    {d === "전체" ? "도메인(전체)" : d}
-                  </option>
-                ))}
-              </select>
-
-              <select
                 value={areaFilter}
-                onChange={(e) => setAreaFilter(e.target.value)}
+                onChange={(e) => {
+                  setAreaFilter(e.target.value);
+                  setDomainFilter("전체");
+                }}
                 className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
               >
                 {areaOptions.map((a) => (
                   <option key={a} value={a}>
                     {a === "전체" ? "영역(전체)" : a}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                value={domainFilter}
+                onChange={(e) => setDomainFilter(e.target.value)}
+                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
+              >
+                {domainOptions.map((d) => (
+                  <option key={d} value={d}>
+                    {d === "전체" ? "도메인(전체)" : d}
                   </option>
                 ))}
               </select>
@@ -411,16 +428,12 @@ export default function ChecklistPanel({ checklistItems = [] }) {
           </div>
         </div>
 
-        {/* ✅ 고정영역 하단 경계(다른 패널과 동일) */}
         <div className="mt-4 border-b border-slate-200" />
       </div>
 
-      {/* ✅ 하단 스크롤 영역(테이블 + 페이지네이션) */}
       <div className="flex-1 min-h-0 overflow-y-auto pr-1 pb-6 space-y-3">
-        {/* Table */}
         <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
           <table className="w-full table-auto">
-            {/* ✅ 테이블 헤더 고정 */}
             <thead className="bg-slate-50 sticky top-0 z-[1]">
               <tr>
                 {cols.map((c) => (
@@ -469,7 +482,6 @@ export default function ChecklistPanel({ checklistItems = [] }) {
           </table>
         </div>
 
-        {/* Pagination */}
         {filteredRows.length > PAGE_SIZE ? (
           <div className="rounded-2xl border border-slate-200 bg-white p-4">
             <div className="flex items-center justify-center gap-2 flex-wrap">

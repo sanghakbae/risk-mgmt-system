@@ -2,16 +2,29 @@
 @tailwind components;
 @tailwind utilities;
 
-html, body, #root {
+@font-face {
+  font-family: "KoPubDotum";
+  src: url("/risk-mgmt-system/fonts/KoPubDotumMedium.ttf") format("truetype");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "KoPubDotumBold";
+  src: url("/risk-mgmt-system/fonts/KoPubDotumBold.ttf") format("truetype");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+html,
+body,
+#root {
   height: 100%;
   width: 100%;
 }
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-html, body, #root {
-  height: 100%;
-  width: 100%;
+body {
+  font-family: "KoPubDotum", sans-serif;
 }

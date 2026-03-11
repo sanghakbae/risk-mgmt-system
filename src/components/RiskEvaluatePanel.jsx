@@ -25,6 +25,35 @@ function clamp(n, min, max) {
   return Math.max(min, Math.min(max, n));
 }
 
+function compareCode(a, b) {
+  const aa = safeStr(a).split(".").map((x) => Number(x));
+  const bb = safeStr(b).split(".").map((x) => Number(x));
+  const len = Math.max(aa.length, bb.length);
+
+  for (let i = 0; i < len; i += 1) {
+    const av = Number.isFinite(aa[i]) ? aa[i] : -1;
+    const bv = Number.isFinite(bb[i]) ? bb[i] : -1;
+    if (av !== bv) return av - bv;
+  }
+
+  return safeStr(a).localeCompare(safeStr(b));
+}
+
+function buildOrderedUniqueOptions(rows, valueGetter) {
+  const sorted = [...rows].sort((a, b) => compareCode(a.code, b.code));
+  const seen = new Set();
+  const out = [];
+
+  for (const row of sorted) {
+    const value = safeStr(valueGetter(row)).trim();
+    if (!value || seen.has(value)) continue;
+    seen.add(value);
+    out.push(value);
+  }
+
+  return out;
+}
+
 function isImageUrl(url) {
   const u = safeStr(url).trim().toLowerCase();
   return /\.(png|jpg|jpeg|gif|webp|bmp|svg)(\?.*)?$/.test(u);
@@ -112,8 +141,8 @@ function EvidencePreviewInline({ url }) {
 function RiskCard({ row, draft, onChangeDraft, onSave, saving, editable, blockMessage }) {
   const code = safeStr(row.code);
   const type = normalizeType(row.type);
-  const domain = safeStr(row.domain);
   const area = safeStr(row.area);
+  const domain = safeStr(row.domain);
   const title = safeStr(row.itemCode ?? row.itemcode);
 
   const statusText = safeStr(row.status ?? row.current_status ?? row.state).trim();
@@ -129,7 +158,7 @@ function RiskCard({ row, draft, onChangeDraft, onSave, saving, editable, blockMe
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="text-sm text-slate-500 whitespace-pre-wrap">
-            {type} · {domain} · {area}
+            {type} · {area} · {domain}
           </div>
 
           <div className="mt-1 text-sm font-semibold text-slate-900 whitespace-pre-wrap">
@@ -179,8 +208,6 @@ function RiskCard({ row, draft, onChangeDraft, onSave, saving, editable, blockMe
           </div>
         </div>
       ) : null}
-
-
 
       <div className="flex items-end gap-4 flex-wrap">
         <div className="min-w-[240px]">
@@ -252,8 +279,8 @@ export default function RiskEvaluatePanel({ checklistItems = [], onUpdated }) {
   }, [rows]);
 
   const [typeFilter, setTypeFilter] = useState(TYPE_ALL);
-  const [domainFilter, setDomainFilter] = useState("전체");
   const [areaFilter, setAreaFilter] = useState("전체");
+  const [domainFilter, setDomainFilter] = useState("전체");
   const [statusFilter, setStatusFilter] = useState("전체");
   const [keyword, setKeyword] = useState("");
 
@@ -270,39 +297,37 @@ export default function RiskEvaluatePanel({ checklistItems = [], onUpdated }) {
   const blockMessage = getRiskBlockMessage(totalCount, vulnDoneCount);
 
   const typeOptions = useMemo(() => {
-    const set = new Set();
-    for (const x of rows) {
-      const t = normalizeType(x.type);
-      if (t) set.add(t);
-    }
-    return [TYPE_ALL, ...Array.from(set).sort((a, b) => a.localeCompare(b))];
+    const types = buildOrderedUniqueOptions(rows, (x) => normalizeType(x.type));
+    return [TYPE_ALL, ...types];
   }, [rows]);
 
-  const domainOptions = useMemo(() => {
-    const set = new Set();
-    for (const x of rows) {
+  const areaOptions = useMemo(() => {
+    const scoped = rows.filter((x) => {
       const t = normalizeType(x.type);
-      if (typeFilter !== TYPE_ALL && t !== typeFilter) continue;
-      const d = safeStr(x.domain).trim();
-      if (d) set.add(d);
-    }
-    return ["전체", ...Array.from(set)];
+
+      if (typeFilter !== TYPE_ALL && t !== typeFilter) {
+        return false;
+      }
+
+      return true;
+    });
+
+    return ["전체", ...buildOrderedUniqueOptions(scoped, (x) => x.area)];
   }, [rows, typeFilter]);
 
-  const areaOptions = useMemo(() => {
-    const set = new Set();
-    for (const x of rows) {
+  const domainOptions = useMemo(() => {
+    const scoped = rows.filter((x) => {
       const t = normalizeType(x.type);
-      if (typeFilter !== TYPE_ALL && t !== typeFilter) continue;
-
-      const d = safeStr(x.domain).trim();
-      if (domainFilter !== "전체" && d !== domainFilter) continue;
+      if (typeFilter !== TYPE_ALL && t !== typeFilter) return false;
 
       const a = safeStr(x.area).trim();
-      if (a) set.add(a);
-    }
-    return ["전체", ...Array.from(set).sort((a, b) => a.localeCompare(b))];
-  }, [rows, typeFilter, domainFilter]);
+      if (areaFilter !== "전체" && a !== areaFilter) return false;
+
+      return true;
+    });
+
+    return ["전체", ...buildOrderedUniqueOptions(scoped, (x) => x.domain)];
+  }, [rows, typeFilter, areaFilter]);
 
   function getDraft(row) {
     const code = safeStr(row.code);
@@ -333,11 +358,11 @@ export default function RiskEvaluatePanel({ checklistItems = [], onUpdated }) {
       const t = normalizeType(x.type);
       if (typeFilter !== TYPE_ALL && t !== typeFilter) return false;
 
-      const d = safeStr(x.domain).trim();
-      if (domainFilter !== "전체" && d !== domainFilter) return false;
-
       const a = safeStr(x.area).trim();
       if (areaFilter !== "전체" && a !== areaFilter) return false;
+
+      const d = safeStr(x.domain).trim();
+      if (domainFilter !== "전체" && d !== domainFilter) return false;
 
       const l = x.likelihood == null ? "" : safeStr(x.likelihood).trim();
       const i = x.impact == null ? "" : safeStr(x.impact).trim();
@@ -364,7 +389,7 @@ export default function RiskEvaluatePanel({ checklistItems = [], onUpdated }) {
 
       return hay.includes(kw);
     });
-  }, [rows, typeFilter, domainFilter, areaFilter, statusFilter, keyword]);
+  }, [rows, typeFilter, areaFilter, domainFilter, statusFilter, keyword]);
 
   const totalPages = useMemo(() => {
     const n = Math.ceil(filtered.length / PAGE_SIZE);
@@ -373,7 +398,7 @@ export default function RiskEvaluatePanel({ checklistItems = [], onUpdated }) {
 
   useEffect(() => {
     setPage(1);
-  }, [typeFilter, domainFilter, areaFilter, statusFilter, keyword]);
+  }, [typeFilter, areaFilter, domainFilter, statusFilter, keyword]);
 
   useEffect(() => {
     setPage((p) => clamp(p, 1, totalPages));
@@ -470,8 +495,8 @@ export default function RiskEvaluatePanel({ checklistItems = [], onUpdated }) {
               value={typeFilter}
               onChange={(e) => {
                 setTypeFilter(e.target.value);
-                setDomainFilter("전체");
                 setAreaFilter("전체");
+                setDomainFilter("전체");
               }}
               className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
             >
@@ -483,28 +508,28 @@ export default function RiskEvaluatePanel({ checklistItems = [], onUpdated }) {
             </select>
 
             <select
-              value={domainFilter}
-              onChange={(e) => {
-                setDomainFilter(e.target.value);
-                setAreaFilter("전체");
-              }}
-              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
-            >
-              {domainOptions.map((d) => (
-                <option key={d} value={d}>
-                  {d === "전체" ? "도메인(전체)" : d}
-                </option>
-              ))}
-            </select>
-
-            <select
               value={areaFilter}
-              onChange={(e) => setAreaFilter(e.target.value)}
+              onChange={(e) => {
+                setAreaFilter(e.target.value);
+                setDomainFilter("전체");
+              }}
               className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
             >
               {areaOptions.map((a) => (
                 <option key={a} value={a}>
                   {a === "전체" ? "영역(전체)" : a}
+                </option>
+              ))}
+            </select>
+
+            <select
+              value={domainFilter}
+              onChange={(e) => setDomainFilter(e.target.value)}
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
+            >
+              {domainOptions.map((d) => (
+                <option key={d} value={d}>
+                  {d === "전체" ? "도메인(전체)" : d}
                 </option>
               ))}
             </select>

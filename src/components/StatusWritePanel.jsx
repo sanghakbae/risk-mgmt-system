@@ -33,6 +33,35 @@ function clamp(n, min, max) {
   return Math.max(min, Math.min(max, n));
 }
 
+function compareCode(a, b) {
+  const aa = safeStr(a).split(".").map((x) => Number(x));
+  const bb = safeStr(b).split(".").map((x) => Number(x));
+  const len = Math.max(aa.length, bb.length);
+
+  for (let i = 0; i < len; i += 1) {
+    const av = Number.isFinite(aa[i]) ? aa[i] : -1;
+    const bv = Number.isFinite(bb[i]) ? bb[i] : -1;
+    if (av !== bv) return av - bv;
+  }
+
+  return safeStr(a).localeCompare(safeStr(b));
+}
+
+function buildOrderedUniqueOptions(rows, valueGetter) {
+  const sorted = [...rows].sort((a, b) => compareCode(a.code, b.code));
+  const seen = new Set();
+  const out = [];
+
+  for (const row of sorted) {
+    const value = safeStr(valueGetter(row)).trim();
+    if (!value || seen.has(value)) continue;
+    seen.add(value);
+    out.push(value);
+  }
+
+  return out;
+}
+
 function isImageUrl(url) {
   const u = safeStr(url).trim().toLowerCase();
   return /\.(png|jpg|jpeg|gif|webp|bmp|svg)(\?.*)?$/.test(u);
@@ -44,11 +73,9 @@ function extractEvidencePathFromPublicUrl(publicUrl) {
   const url = safeStr(publicUrl).trim();
   if (!url) return "";
 
-  // 흔한 형태: /storage/v1/object/public/<bucket>/<path>
   const m = url.match(/\/storage\/v1\/object\/public\/evidence\/(.+)$/);
   if (m?.[1]) return decodeURIComponent(m[1]);
 
-  // 혹시 다른 형태가 섞여도 마지막 /evidence/ 이후를 최대한 추출
   const idx = url.toLowerCase().indexOf("/evidence/");
   if (idx >= 0) return decodeURIComponent(url.slice(idx + "/evidence/".length));
 
@@ -58,10 +85,10 @@ function extractEvidencePathFromPublicUrl(publicUrl) {
 export default function StatusWritePanel({ checklistItems = [], onUpdated }) {
   const rows = useMemo(() => (Array.isArray(checklistItems) ? checklistItems : []), [checklistItems]);
 
-  // ✅ 상단 필터 상태
+  // ✅ 상단 필터 상태: 유형 → 영역 → 도메인
   const [typeFilter, setTypeFilter] = useState("전체");
-  const [domainFilter, setDomainFilter] = useState("전체");
   const [areaFilter, setAreaFilter] = useState("전체");
+  const [domainFilter, setDomainFilter] = useState("전체");
   const [statusFilter, setStatusFilter] = useState("전체"); // 입력됨/미입력
   const [keyword, setKeyword] = useState("");
 
@@ -110,42 +137,44 @@ export default function StatusWritePanel({ checklistItems = [], onUpdated }) {
     setFileByCode((prev) => ({ ...prev, [key]: file || null }));
   }
 
-  // ✅ 옵션들
+  // ✅ 옵션들: 코드 순서 기준 첫 등장 순서
   const typeOptions = useMemo(() => {
-    const set = new Set();
-    for (const x of rows) {
-      const t = normalizeType(x.type);
-      if (t) set.add(t);
-    }
-    return ["전체", ...Array.from(set).sort((a, b) => a.localeCompare(b))];
-  }, [rows]);
-
-  const domainOptions = useMemo(() => {
-    const set = new Set();
-    for (const x of rows) {
-      const d = safeStr(x.domain).trim();
-      if (d) set.add(d);
-    }
-    return ["전체", ...Array.from(set)];
+    const types = buildOrderedUniqueOptions(rows, (x) => normalizeType(x.type));
+    return ["전체", ...types];
   }, [rows]);
 
   const areaOptions = useMemo(() => {
-    const set = new Set();
-    for (const x of rows) {
-      const a = safeStr(x.area).trim();
-      if (a) set.add(a);
-    }
-    return ["전체", ...Array.from(set).sort((a, b) => a.localeCompare(b))];
-  }, [rows]);
+    const scoped = rows.filter((x) => {
+      const t = normalizeType(x.type);
+      if (typeFilter !== "전체" && t !== typeFilter) return false;
+      return true;
+    });
 
-  // ✅ 필터 적용
+    return ["전체", ...buildOrderedUniqueOptions(scoped, (x) => x.area)];
+  }, [rows, typeFilter]);
+
+  const domainOptions = useMemo(() => {
+    const scoped = rows.filter((x) => {
+      const t = normalizeType(x.type);
+      if (typeFilter !== "전체" && t !== typeFilter) return false;
+
+      const a = safeStr(x.area).trim();
+      if (areaFilter !== "전체" && a !== areaFilter) return false;
+
+      return true;
+    });
+
+    return ["전체", ...buildOrderedUniqueOptions(scoped, (x) => x.domain)];
+  }, [rows, typeFilter, areaFilter]);
+
+  // ✅ 필터 적용: 유형 → 영역 → 도메인
   const filteredRows = useMemo(() => {
     const kw = safeStr(keyword).trim().toLowerCase();
 
     return rows.filter((x) => {
       if (typeFilter !== "전체" && normalizeType(x.type) !== typeFilter) return false;
-      if (domainFilter !== "전체" && safeStr(x.domain).trim() !== domainFilter) return false;
       if (areaFilter !== "전체" && safeStr(x.area).trim() !== areaFilter) return false;
+      if (domainFilter !== "전체" && safeStr(x.domain).trim() !== domainFilter) return false;
 
       const hasStatus = safeStr(x.status).trim().length > 0;
       if (statusFilter === "입력됨" && !hasStatus) return false;
@@ -170,7 +199,7 @@ export default function StatusWritePanel({ checklistItems = [], onUpdated }) {
 
       return hay.includes(kw);
     });
-  }, [rows, typeFilter, domainFilter, areaFilter, statusFilter, keyword]);
+  }, [rows, typeFilter, areaFilter, domainFilter, statusFilter, keyword]);
 
   const totalPages = useMemo(() => {
     const n = Math.ceil(filteredRows.length / pageSize);
@@ -179,7 +208,7 @@ export default function StatusWritePanel({ checklistItems = [], onUpdated }) {
 
   useEffect(() => {
     setPage(1);
-  }, [typeFilter, domainFilter, areaFilter, statusFilter, keyword]);
+  }, [typeFilter, areaFilter, domainFilter, statusFilter, keyword]);
 
   useEffect(() => {
     setPage((p) => clamp(p, 1, totalPages));
@@ -240,7 +269,6 @@ export default function StatusWritePanel({ checklistItems = [], onUpdated }) {
     const url = data?.publicUrl || "";
     if (!url) throw new Error("업로드는 성공했지만 public URL 생성 실패");
 
-    // 업로드 후 선택 파일 제거
     setFile(code, null);
     return url;
   }
@@ -279,12 +307,10 @@ export default function StatusWritePanel({ checklistItems = [], onUpdated }) {
     }
   }
 
-  // ✅ 업로드 전 선택 파일 "X" (선택 취소)
   function clearSelectedFile(code) {
     setFile(code, null);
   }
 
-  // ✅ 업로드된 증적 삭제 "X" (스토리지 제거 + DB null)
   async function deleteUploadedEvidence(row) {
     const code = safeStr(row.code);
     const url = safeStr(row.evidence_url).trim();
@@ -297,13 +323,11 @@ export default function StatusWritePanel({ checklistItems = [], onUpdated }) {
 
       const path = extractEvidencePathFromPublicUrl(url);
 
-      // 1) Storage 파일 삭제(경로 추출 실패하면 DB만 비움)
       if (path) {
         const { error: rmErr } = await supabase.storage.from("evidence").remove([path]);
         if (rmErr) throw new Error("스토리지 삭제 실패: " + rmErr.message);
       }
 
-      // 2) DB evidence_url null
       await updateChecklistByCode(code, { evidence_url: null });
 
       onUpdated?.();
@@ -315,28 +339,41 @@ export default function StatusWritePanel({ checklistItems = [], onUpdated }) {
     }
   }
 
-  // ✅ 라벨/텍스트 폰트 통일 규칙:
-  // - 질문(체크리스트 항목): bold + text-sm
-  // - 섹션 라벨(현황, 증적 업로드): bold + text-sm
-  // - 본문 텍스트: text-sm
   const labelCls = "text-sm font-bold text-slate-900";
   const bodyCls = "text-sm text-slate-800 whitespace-pre-wrap break-words";
 
   return (
-    // ✅ 상단(필터) 고정 + 하단(리스트/페이지)만 스크롤
     <div className="h-[calc(100vh-180px)] flex flex-col gap-4 w-full max-w-none">
-      {/* ✅ 여기까지 고정 */}
       <div className="sticky top-0 z-10 -mx-6 px-6 bg-slate-50/95 backdrop-blur pt-1">
         <div className="rounded-2xl border border-slate-200 bg-white p-4">
           <div className="flex items-center gap-2 flex-wrap">
             <select
               value={typeFilter}
-              onChange={(e) => setTypeFilter(e.target.value)}
+              onChange={(e) => {
+                setTypeFilter(e.target.value);
+                setAreaFilter("전체");
+                setDomainFilter("전체");
+              }}
               className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
             >
               {typeOptions.map((t) => (
                 <option key={t} value={t}>
                   {t === "전체" ? "유형(전체)" : t}
+                </option>
+              ))}
+            </select>
+
+            <select
+              value={areaFilter}
+              onChange={(e) => {
+                setAreaFilter(e.target.value);
+                setDomainFilter("전체");
+              }}
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
+            >
+              {areaOptions.map((a) => (
+                <option key={a} value={a}>
+                  {a === "전체" ? "영역(전체)" : a}
                 </option>
               ))}
             </select>
@@ -349,18 +386,6 @@ export default function StatusWritePanel({ checklistItems = [], onUpdated }) {
               {domainOptions.map((d) => (
                 <option key={d} value={d}>
                   {d === "전체" ? "도메인(전체)" : d}
-                </option>
-              ))}
-            </select>
-
-            <select
-              value={areaFilter}
-              onChange={(e) => setAreaFilter(e.target.value)}
-              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
-            >
-              {areaOptions.map((a) => (
-                <option key={a} value={a}>
-                  {a === "전체" ? "영역(전체)" : a}
                 </option>
               ))}
             </select>
@@ -388,15 +413,13 @@ export default function StatusWritePanel({ checklistItems = [], onUpdated }) {
           </div>
         </div>
 
-        {/* 고정영역 하단 경계 */}
         <div className="mt-4 border-b border-slate-200" />
       </div>
 
-      {/* ✅ 아래만 스크롤 */}
       <div className="flex-1 min-h-0 overflow-y-auto pr-1 pb-6 space-y-3">
         {pageRows.map((row) => {
           const code = safeStr(row.code);
-          const title = `[${code}] ${safeStr(row.itemCode ?? row.itemcode)}`; // ✅ 체크리스트 질문(항목)
+          const title = `[${code}] ${safeStr(row.itemCode ?? row.itemcode)}`;
           const draft = getDraft(code, row);
           const selectedFile = fileByCode[code];
           const busy = savingCode === code || uploadingCode === code || deletingCode === code;
@@ -406,10 +429,8 @@ export default function StatusWritePanel({ checklistItems = [], onUpdated }) {
 
           return (
             <div key={code} className="rounded-2xl border border-slate-200 bg-white p-5 space-y-4">
-              {/* ✅ 체크리스트 질문: 볼드 + text-sm */}
               <div className="text-sm font-bold text-slate-900 whitespace-pre-wrap">{title}</div>
 
-              {/* ✅ 현황: 라벨/내용 폰트 동일 (text-sm), 라벨만 볼드 */}
               <div className="space-y-1">
                 <div className={labelCls}>현황</div>
                 <textarea
@@ -425,14 +446,12 @@ export default function StatusWritePanel({ checklistItems = [], onUpdated }) {
                 />
               </div>
 
-              {/* ✅ 증적 업로드: 라벨 볼드 + text-sm */}
               <div className="space-y-1">
                 <div className={labelCls}>증적 업로드</div>
 
                 <div className="flex items-center gap-3 flex-wrap">
                   <input type="file" onChange={(e) => setFile(code, e.target.files?.[0] || null)} className="text-sm" />
 
-                  {/* ✅ 선택 파일 표시 + 선택 취소 X */}
                   <div className="flex items-center gap-2">
                     <div className="text-sm text-slate-700">
                       {selectedFile ? `선택됨: ${selectedFile.name}` : "선택된 파일 없음"}
@@ -450,7 +469,6 @@ export default function StatusWritePanel({ checklistItems = [], onUpdated }) {
                     ) : null}
                   </div>
 
-                  {/* ✅ 업로드된 증적: 이미지면 썸네일 + 클릭 새탭, 아니면 링크 */}
                   {evidenceUrl ? (
                     <div className="flex items-center gap-2">
                       {isImg ? (
@@ -478,7 +496,6 @@ export default function StatusWritePanel({ checklistItems = [], onUpdated }) {
                         </a>
                       )}
 
-                      {/* ✅ 업로드된 증적 삭제 X */}
                       <button
                         type="button"
                         onClick={() => deleteUploadedEvidence(row)}
@@ -510,7 +527,6 @@ export default function StatusWritePanel({ checklistItems = [], onUpdated }) {
           <div className="py-10 text-center text-sm text-slate-500">표시할 항목이 없습니다.</div>
         ) : null}
 
-        {/* 페이지네이션 */}
         {totalPages > 1 ? (
           <div className="rounded-2xl border border-slate-200 bg-white p-4">
             <div className="flex items-center justify-center gap-2 flex-wrap">
