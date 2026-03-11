@@ -3,6 +3,12 @@ import Button from "../ui/Button";
 import { fetchSecuritySettings, upsertSecuritySetting, writeAuditLog } from "../api/admin";
 
 const DEFAULT_ALLOWED_DOMAINS = ["muhayu.com", "gmail.com"];
+const DEFAULT_SESSION_TIMEOUT_MINUTES = 60;
+const MIN_SESSION_TIMEOUT_MINUTES = 1;
+const MAX_SESSION_TIMEOUT_MINUTES = 1440;
+const DEFAULT_LOG_RETENTION_DAYS = 180;
+const MIN_LOG_RETENTION_DAYS = 1;
+const MAX_LOG_RETENTION_DAYS = 3650;
 
 function cardClass() {
   return "rounded-2xl border border-slate-200 bg-white p-5";
@@ -30,6 +36,14 @@ function normalizeDomainsInput(value) {
   return [...new Set(domains)];
 }
 
+function normalizePositiveInteger(value) {
+  if (value === "" || value == null) return NaN;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return NaN;
+  if (!Number.isInteger(n)) return NaN;
+  return n;
+}
+
 export default function AdminSecurityPanel({ session, reloadKey, onChanged }) {
   const [loading, setLoading] = useState(true);
   const [savingKey, setSavingKey] = useState("");
@@ -37,8 +51,8 @@ export default function AdminSecurityPanel({ session, reloadKey, onChanged }) {
 
   const [allowedDomainsText, setAllowedDomainsText] = useState(DEFAULT_ALLOWED_DOMAINS.join(", "));
   const [adminMfaRequired, setAdminMfaRequired] = useState(true);
-  const [sessionTimeoutMinutes, setSessionTimeoutMinutes] = useState(60);
-  const [logRetentionDays, setLogRetentionDays] = useState(180);
+  const [sessionTimeoutMinutes, setSessionTimeoutMinutes] = useState(DEFAULT_SESSION_TIMEOUT_MINUTES);
+  const [logRetentionDays, setLogRetentionDays] = useState(DEFAULT_LOG_RETENTION_DAYS);
   const [rawRows, setRawRows] = useState([]);
 
   useEffect(() => {
@@ -70,8 +84,18 @@ export default function AdminSecurityPanel({ session, reloadKey, onChanged }) {
         );
 
         setAdminMfaRequired(Boolean(byKey.admin_mfa_required?.value?.enabled ?? true));
-        setSessionTimeoutMinutes(parseNumber(byKey.session_timeout_minutes?.value?.minutes, 60));
-        setLogRetentionDays(parseNumber(byKey.log_retention_days?.value?.days, 180));
+        setSessionTimeoutMinutes(
+          parseNumber(
+            byKey.session_timeout_minutes?.value?.minutes,
+            DEFAULT_SESSION_TIMEOUT_MINUTES
+          )
+        );
+        setLogRetentionDays(
+          parseNumber(
+            byKey.log_retention_days?.value?.days,
+            DEFAULT_LOG_RETENTION_DAYS
+          )
+        );
       } catch (e) {
         if (!mounted) return;
         console.error(e);
@@ -147,7 +171,23 @@ export default function AdminSecurityPanel({ session, reloadKey, onChanged }) {
   }
 
   async function handleSaveSessionTimeout() {
-    const minutes = parseNumber(sessionTimeoutMinutes, 60);
+    const minutes = normalizePositiveInteger(sessionTimeoutMinutes);
+
+    if (!Number.isFinite(minutes)) {
+      alert("세션 만료 시간은 정수로 입력해야 합니다.");
+      return;
+    }
+
+    if (minutes < MIN_SESSION_TIMEOUT_MINUTES) {
+      alert(`세션 만료 시간은 최소 ${MIN_SESSION_TIMEOUT_MINUTES}분 이상이어야 합니다.`);
+      return;
+    }
+
+    if (minutes > MAX_SESSION_TIMEOUT_MINUTES) {
+      alert(`세션 만료 시간은 최대 ${MAX_SESSION_TIMEOUT_MINUTES}분(24시간)까지 설정할 수 있습니다.`);
+      return;
+    }
+
     await saveSetting(
       "session_timeout_minutes",
       { minutes },
@@ -156,7 +196,23 @@ export default function AdminSecurityPanel({ session, reloadKey, onChanged }) {
   }
 
   async function handleSaveLogRetentionDays() {
-    const days = parseNumber(logRetentionDays, 180);
+    const days = normalizePositiveInteger(logRetentionDays);
+
+    if (!Number.isFinite(days)) {
+      alert("감사 로그 보관 기간은 정수로 입력해야 합니다.");
+      return;
+    }
+
+    if (days < MIN_LOG_RETENTION_DAYS) {
+      alert(`감사 로그 보관 기간은 최소 ${MIN_LOG_RETENTION_DAYS}일 이상이어야 합니다.`);
+      return;
+    }
+
+    if (days > MAX_LOG_RETENTION_DAYS) {
+      alert(`감사 로그 보관 기간은 최대 ${MAX_LOG_RETENTION_DAYS}일까지 설정할 수 있습니다.`);
+      return;
+    }
+
     await saveSetting(
       "log_retention_days",
       { days },
@@ -164,7 +220,10 @@ export default function AdminSecurityPanel({ session, reloadKey, onChanged }) {
     );
   }
 
-  const rawPreview = useMemo(() => rawRows.map((r) => ({ ...r, value: r.value ?? {} })), [rawRows]);
+  const rawPreview = useMemo(
+    () => rawRows.map((r) => ({ ...r, value: r.value ?? {} })),
+    [rawRows]
+  );
 
   if (loading) {
     return <div className="text-slate-600">보안 설정을 불러오는 중...</div>;
@@ -230,12 +289,16 @@ export default function AdminSecurityPanel({ session, reloadKey, onChanged }) {
 
         <div className={cardClass()}>
           <div className="text-sm font-semibold text-slate-900">세션 만료 시간</div>
-          <div className="text-xs text-slate-500 mt-1">분 단위로 관리</div>
+          <div className="text-xs text-slate-500 mt-1">
+            분 단위로 관리 · {MIN_SESSION_TIMEOUT_MINUTES}~{MAX_SESSION_TIMEOUT_MINUTES}분 입력
+          </div>
 
           <div className="mt-4 flex gap-2">
             <input
               type="number"
-              min="1"
+              min={MIN_SESSION_TIMEOUT_MINUTES}
+              max={MAX_SESSION_TIMEOUT_MINUTES}
+              step="1"
               className="flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-slate-400"
               value={sessionTimeoutMinutes}
               onChange={(e) => setSessionTimeoutMinutes(e.target.value)}
@@ -247,16 +310,24 @@ export default function AdminSecurityPanel({ session, reloadKey, onChanged }) {
               저장
             </Button>
           </div>
+
+          <div className="mt-2 text-xs text-slate-500">
+            권장값: <span className="font-medium">30</span>, <span className="font-medium">60</span>, <span className="font-medium">120</span>
+          </div>
         </div>
 
         <div className={cardClass()}>
           <div className="text-sm font-semibold text-slate-900">감사 로그 보관 기간</div>
-          <div className="text-xs text-slate-500 mt-1">일 단위 보관 정책</div>
+          <div className="text-xs text-slate-500 mt-1">
+            일 단위 보관 정책 · {MIN_LOG_RETENTION_DAYS}~{MAX_LOG_RETENTION_DAYS}일 입력
+          </div>
 
           <div className="mt-4 flex gap-2">
             <input
               type="number"
-              min="1"
+              min={MIN_LOG_RETENTION_DAYS}
+              max={MAX_LOG_RETENTION_DAYS}
+              step="1"
               className="flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-slate-400"
               value={logRetentionDays}
               onChange={(e) => setLogRetentionDays(e.target.value)}

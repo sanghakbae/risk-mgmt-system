@@ -1,3 +1,4 @@
+// App.jsx
 import React, { useEffect, useMemo, useState, useCallback } from "react";
 import {
   LayoutDashboard,
@@ -34,7 +35,10 @@ import { supabase } from "./lib/supabaseClient";
 import { fetchMyRole, syncMyProfile } from "./api/admin";
 
 const DEFAULT_ALLOWED_DOMAINS = ["muhayu.com", "gmail.com"];
-const AUTH_INIT_TIMEOUT_MS = 1800;
+const AUTH_INIT_TIMEOUT_MS = 5000;
+const DEFAULT_SESSION_TIMEOUT_MINUTES = 60;
+const SESSION_LOGIN_AT_KEY = "app_session_login_at_v1";
+const LEGACY_AUTH_KEYS = ["sb-risk-mgmt-auth"];
 
 const STEPS = [
   { key: "dashboard", title: "Analytics", desc: "전체 현황 요약", icon: <LayoutDashboard className="w-4 h-4" /> },
@@ -97,7 +101,14 @@ function cleanupSupabaseStorage() {
   try {
     const localKeys = Object.keys(localStorage);
     for (const k of localKeys) {
-      if (k.toLowerCase().includes("supabase")) {
+      const lower = k.toLowerCase();
+
+      if (
+        lower.includes("supabase") ||
+        lower.includes("-auth-token") ||
+        LEGACY_AUTH_KEYS.includes(k) ||
+        k === SESSION_LOGIN_AT_KEY
+      ) {
         localStorage.removeItem(k);
       }
     }
@@ -106,7 +117,13 @@ function cleanupSupabaseStorage() {
   try {
     const sessionKeys = Object.keys(sessionStorage);
     for (const k of sessionKeys) {
-      if (k.toLowerCase().includes("supabase")) {
+      const lower = k.toLowerCase();
+
+      if (
+        lower.includes("supabase") ||
+        lower.includes("-auth-token") ||
+        LEGACY_AUTH_KEYS.includes(k)
+      ) {
         sessionStorage.removeItem(k);
       }
     }
@@ -117,6 +134,48 @@ function resetToAppRoot() {
   const base = `${window.location.origin}${window.location.pathname}`;
   window.history.replaceState({}, "", base);
   window.location.hash = "";
+}
+
+function parseSessionTimeoutMinutes(rawValue) {
+  const minutes = Number(rawValue?.minutes);
+  return Number.isFinite(minutes) && minutes > 0 ? minutes : DEFAULT_SESSION_TIMEOUT_MINUTES;
+}
+
+function getStoredLoginAt() {
+  try {
+    const raw = localStorage.getItem(SESSION_LOGIN_AT_KEY);
+    const n = Number(raw);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  } catch {
+    return null;
+  }
+}
+
+function setStoredLoginAt(ts) {
+  try {
+    localStorage.setItem(SESSION_LOGIN_AT_KEY, String(ts));
+  } catch {}
+}
+
+function clearStoredLoginAt() {
+  try {
+    localStorage.removeItem(SESSION_LOGIN_AT_KEY);
+  } catch {}
+}
+
+function computeEffectiveExpiry(session, sessionTimeoutMinutes) {
+  if (!session) return null;
+
+  const now = Date.now();
+  const loginAt = getStoredLoginAt() ?? now;
+  const appExpiry = loginAt + sessionTimeoutMinutes * 60 * 1000;
+
+  const supabaseExpiry =
+    Number.isFinite(session?.expires_at) && session.expires_at > 0
+      ? session.expires_at * 1000
+      : Number.MAX_SAFE_INTEGER;
+
+  return Math.min(appExpiry, supabaseExpiry);
 }
 
 function TopBar({ title, subtitle, right }) {
@@ -170,8 +229,6 @@ function Sidebar({ collapsed, activeKey, onSelect, onToggle, role }) {
         </div>
 
         <div className={collapsed ? "px-1 py-3 flex-1 overflow-auto" : "px-2 py-3 flex-1 overflow-auto"}>
-          
-
           <div className="space-y-1">
             {visibleSteps.map((s) => {
               const active = s.key === activeKey;
@@ -233,6 +290,7 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState(true);
   const [role, setRole] = useState("user");
   const [allowedDomains, setAllowedDomains] = useState(DEFAULT_ALLOWED_DOMAINS);
+  const [sessionTimeoutMinutes, setSessionTimeoutMinutes] = useState(DEFAULT_SESSION_TIMEOUT_MINUTES);
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [activeStep, setActiveStep] = useState("dashboard");
@@ -273,6 +331,30 @@ export default function App() {
     }
   }, []);
 
+  const loadSessionTimeoutMinutes = useCallback(async () => {
+    try {
+      const { data, error } = await withTimeout(
+        supabase
+          .from("security_settings")
+          .select("value")
+          .eq("key", "session_timeout_minutes")
+          .maybeSingle(),
+        1200,
+        { data: null, error: null }
+      );
+
+      if (error) {
+        console.error("session_timeout_minutes load error:", error);
+        return DEFAULT_SESSION_TIMEOUT_MINUTES;
+      }
+
+      return parseSessionTimeoutMinutes(data?.value ?? {});
+    } catch (e) {
+      console.error("session_timeout_minutes load catch:", e);
+      return DEFAULT_SESSION_TIMEOUT_MINUTES;
+    }
+  }, []);
+
   const loadRoleAndProfile = useCallback(async (nextSession) => {
     if (!nextSession?.user) {
       setRole("user");
@@ -301,6 +383,7 @@ export default function App() {
       console.error("signOut error:", e);
     }
 
+    clearStoredLoginAt();
     cleanupSupabaseStorage();
     setSession(null);
     setRole("user");
@@ -312,6 +395,23 @@ export default function App() {
     }
   }, []);
 
+  const enforceSessionPolicy = useCallback(
+    async (nextSession, timeoutMinutes) => {
+      if (!nextSession) return false;
+
+      const effectiveExpiry = computeEffectiveExpiry(nextSession, timeoutMinutes);
+      if (!effectiveExpiry) return false;
+
+      if (Date.now() >= effectiveExpiry) {
+        await forceLocalLogout("세션이 만료되었습니다. 다시 로그인해주세요.");
+        return true;
+      }
+
+      return false;
+    },
+    [forceLocalLogout]
+  );
+
   useEffect(() => {
     let mounted = true;
 
@@ -322,9 +422,15 @@ export default function App() {
 
     async function bootstrap() {
       try {
-        const domains = await loadAllowedDomains();
+        const [domains, timeoutMinutes] = await Promise.all([
+          loadAllowedDomains(),
+          loadSessionTimeoutMinutes(),
+        ]);
+
         if (!mounted) return;
+
         setAllowedDomains(domains);
+        setSessionTimeoutMinutes(timeoutMinutes);
 
         const result = await withTimeout(
           supabase.auth.getSession(),
@@ -335,9 +441,22 @@ export default function App() {
         if (!mounted) return;
 
         const nextSession = result?.data?.session ?? null;
+        const authError = result?.error ?? null;
+
+        if (authError) {
+          console.error("getSession error:", authError);
+        }
 
         if (nextSession && !isAllowedDomain(nextSession, domains)) {
           await forceLocalLogout(`${domains.join(", ")} 계정만 허용됩니다.`);
+          return;
+        }
+
+        if (nextSession && !getStoredLoginAt()) {
+          setStoredLoginAt(Date.now());
+        }
+
+        if (await enforceSessionPolicy(nextSession, timeoutMinutes)) {
           return;
         }
 
@@ -355,27 +474,48 @@ export default function App() {
 
     bootstrap();
 
-    const { data: sub } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
+    const { data: sub } = supabase.auth.onAuthStateChange(async (event, newSession) => {
       if (!mounted) return;
 
       setAuthLoading(false);
 
-      const domains = await loadAllowedDomains();
+      const [domains, timeoutMinutes] = await Promise.all([
+        loadAllowedDomains(),
+        loadSessionTimeoutMinutes(),
+      ]);
+
       if (!mounted) return;
+
       setAllowedDomains(domains);
+      setSessionTimeoutMinutes(timeoutMinutes);
 
       if (newSession && !isAllowedDomain(newSession, domains)) {
         await forceLocalLogout(`${domains.join(", ")} 계정만 허용됩니다.`);
         return;
       }
 
-      setSession(newSession ?? null);
+      if (event === "SIGNED_IN" && newSession) {
+        console.log("SIGNED_IN", newSession.user?.email);
+        setStoredLoginAt(Date.now());
+      }
+
       if (!newSession) {
+        clearStoredLoginAt();
+        setSession(null);
         setRole("user");
         resetToAppRoot();
         return;
       }
 
+      if (!getStoredLoginAt()) {
+        setStoredLoginAt(Date.now());
+      }
+
+      if (await enforceSessionPolicy(newSession, timeoutMinutes)) {
+        return;
+      }
+
+      setSession(newSession);
       loadRoleAndProfile(newSession);
     });
 
@@ -384,7 +524,34 @@ export default function App() {
       clearTimeout(hardStop);
       sub?.subscription?.unsubscribe?.();
     };
-  }, [forceLocalLogout, loadAllowedDomains, loadRoleAndProfile]);
+  }, [
+    enforceSessionPolicy,
+    forceLocalLogout,
+    loadAllowedDomains,
+    loadRoleAndProfile,
+    loadSessionTimeoutMinutes,
+  ]);
+
+  useEffect(() => {
+    if (!session) return;
+
+    const timer = setInterval(async () => {
+      const timeoutMinutes = await loadSessionTimeoutMinutes();
+      setSessionTimeoutMinutes(timeoutMinutes);
+
+      const { data } = await supabase.auth.getSession();
+      const currentSession = data?.session ?? null;
+
+      if (!currentSession) {
+        await forceLocalLogout();
+        return;
+      }
+
+      await enforceSessionPolicy(currentSession, timeoutMinutes);
+    }, 30000);
+
+    return () => clearInterval(timer);
+  }, [session, loadSessionTimeoutMinutes, enforceSessionPolicy, forceLocalLogout]);
 
   useEffect(() => {
     const CACHE_KEY = "checklist_cache_v1";
@@ -436,6 +603,10 @@ export default function App() {
     return <LoginPage />;
   }
 
+  const effectiveExpiry = computeEffectiveExpiry(session, sessionTimeoutMinutes);
+  const remainMs = effectiveExpiry ? Math.max(0, effectiveExpiry - Date.now()) : 0;
+  const remainMin = Math.ceil(remainMs / 60000);
+
   const topRight = (
     <>
       <div className="hidden md:flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
@@ -456,6 +627,11 @@ export default function App() {
       <div className="hidden lg:flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-500">
         허용 도메인
         <span className="font-semibold text-slate-900">{allowedDomains.join(", ")}</span>
+      </div>
+
+      <div className="hidden xl:flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-500">
+        세션 만료까지
+        <span className="font-semibold text-slate-900">{remainMin}분</span>
       </div>
 
       <Button variant="outline" onClick={handleLogout}>
