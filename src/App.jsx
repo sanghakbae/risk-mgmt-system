@@ -395,6 +395,41 @@ export default function App() {
     }
   }, []);
 
+
+  const handleExtendSession = useCallback(async () => {
+  try {
+    const timeoutMinutes = await loadSessionTimeoutMinutes();
+    setSessionTimeoutMinutes(timeoutMinutes);
+
+    const { data, error } = await supabase.auth.refreshSession();
+
+    if (error) {
+      console.error("refreshSession error:", error);
+      alert("세션 연장에 실패했습니다. 다시 로그인해주세요.");
+      await forceLocalLogout();
+      return;
+    }
+
+    const refreshedSession = data?.session ?? null;
+
+    if (!refreshedSession) {
+      alert("세션 정보가 없어 다시 로그인해야 합니다.");
+      await forceLocalLogout();
+      return;
+    }
+
+      setStoredLoginAt(Date.now());
+      setSession(refreshedSession);
+
+      await loadRoleAndProfile(refreshedSession);
+
+      alert(`세션이 ${timeoutMinutes}분 기준으로 연장되었습니다.`);
+    } catch (e) {
+      console.error("handleExtendSession error:", e);
+      alert("세션 연장 중 오류가 발생했습니다.");
+    }
+  }, [forceLocalLogout, loadRoleAndProfile, loadSessionTimeoutMinutes]);
+
   const enforceSessionPolicy = useCallback(
     async (nextSession, timeoutMinutes) => {
       if (!nextSession) return false;
@@ -607,6 +642,9 @@ export default function App() {
   const remainMs = effectiveExpiry ? Math.max(0, effectiveExpiry - Date.now()) : 0;
   const remainMin = Math.ceil(remainMs / 60000);
 
+
+
+
   const topRight = (
     <>
       <div className="hidden md:flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
@@ -633,6 +671,10 @@ export default function App() {
         세션 만료까지
         <span className="font-semibold text-slate-900">{remainMin}분</span>
       </div>
+
+      <Button variant="outline" onClick={handleExtendSession}>
+        세션 연장
+      </Button>
 
       <Button variant="outline" onClick={handleLogout}>
         로그아웃
