@@ -102,27 +102,24 @@ function Modal({ open, title, onClose, children, footer }) {
 ------------------------------ */
 function EvidenceBlock({ urls = [] }) {
   const list = Array.isArray(urls) ? urls : [];
+  if (!list.length) return null;
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white px-3 py-2">
       <div className="text-sm font-bold text-slate-900">증적</div>
 
       <div className="mt-2">
-        {!list.length ? (
-          <div className="text-sm text-slate-800 whitespace-pre-wrap break-words">—</div>
-        ) : (
-          <div className="flex flex-wrap gap-2">
-            {list.map((u, idx) => (
-              <EvidenceModalTrigger
-                key={`${u}-${idx}`}
-                url={u}
-                imageClassName="max-h-[640px] rounded-xl border border-slate-200 object-contain hover:opacity-90"
-                linkClassName="inline-flex items-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                fit="contain"
-              />
-            ))}
-          </div>
-        )}
+        <div className="flex flex-wrap gap-2">
+          {list.map((u, idx) => (
+            <EvidenceModalTrigger
+              key={`${u}-${idx}`}
+              url={u}
+              imageClassName="max-h-[640px] rounded-xl border border-slate-200 object-contain hover:opacity-90"
+              linkClassName="inline-flex items-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              fit="contain"
+            />
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -159,62 +156,22 @@ function SummaryImageBlock({ url }) {
   Report Content
 ------------------------------ */
 function ReportContent({ id, reportItems, summary, createdAt, summaryImageUrl }) {
-  const vulnerableItems = useMemo(
-    () => reportItems.filter((x) => safeStr(x.result).trim() === "취약"),
-    [reportItems]
-  );
-  const doms = useMemo(() => domainCounts(vulnerableItems), [vulnerableItems]);
-  const summaryChips = useMemo(() => buildSummaryChips(summary), [summary]);
-
   return (
     <div id={id} className="space-y-4">
       <div className="report-first-page space-y-4">
-        <div className="relative px-1">
-          <div className="text-center text-2xl md:text-3xl font-extrabold text-slate-900">
+        <div className="rounded-2xl border border-slate-300 bg-white p-6 md:p-7">
+          <div className="text-[11px] font-semibold tracking-[0.18em] text-slate-500 text-center">RISK ASSESSMENT REPORT</div>
+          <div className="mt-2 text-center text-[28px] leading-tight font-extrabold text-slate-900">
             체크리스트 기반 위험평가 결과보고서
           </div>
-          <div className="mt-2 text-xs text-slate-500 text-right">생성일시: {createdAt}</div>
-        </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-8 gap-3">
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 md:col-span-2">
-            <div className="text-sm font-semibold text-slate-900">결과 요약</div>
-            <div
-              className="mt-3 grid gap-2"
-              style={{ gridTemplateColumns: `repeat(${Math.max(1, summaryChips.length)}, minmax(0, 1fr))` }}
-            >
-              {summaryChips.map((chip) => (
-                <span
-                  key={`report-summary-${chip.key}`}
-                  className={`w-full text-center px-2 py-2 rounded-lg border text-sm font-semibold ${chip.className}`}
-                >
-                  {chip.label}: {chip.value}
-                </span>
-              ))}
-            </div>
-          </div>
+          <div className="mt-4 h-px bg-slate-200" />
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 md:col-span-6">
-            <div className="text-sm font-semibold text-slate-900">상세 취약점 도메인</div>
-            <div className="mt-1 text-xs text-slate-500">취약 항목 기준 도메인별 건수</div>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {doms.length ? (
-                doms.slice(0, 20).map(([d, c]) => (
-                  <span
-                    key={d}
-                    className="px-3 py-1 rounded-full border text-xs font-semibold bg-white text-slate-700 border-slate-200"
-                  >
-                    {d} <span className="text-slate-500">{c}</span>
-                  </span>
-                ))
-              ) : (
-                <div className="text-xs text-slate-500">표시할 항목이 없습니다.</div>
-              )}
-            </div>
+          <div className="mt-4 text-sm text-slate-700">
+            <div className="font-semibold">생성일시:</div>
+            <div className="mt-1 tabular-nums">{createdAt}</div>
           </div>
         </div>
-
-        <SummaryImageBlock url={summaryImageUrl} />
       </div>
 
       <div className="p-1">
@@ -264,7 +221,7 @@ function ReportContent({ id, reportItems, summary, createdAt, summaryImageUrl })
                         {statusText || "—"}
                       </div>
                     </div>
-                    <EvidenceBlock urls={evidenceUrls} />
+                    {evidenceUrls.length ? <EvidenceBlock urls={evidenceUrls} /> : null}
                   </div>
                 ) : isVuln ? (
                   <>
@@ -291,9 +248,11 @@ function ReportContent({ id, reportItems, summary, createdAt, summaryImageUrl })
                       </div>
                     </div>
 
-                    <div className="mt-3">
-                      <EvidenceBlock urls={evidenceUrls} />
-                    </div>
+                    {evidenceUrls.length ? (
+                      <div className="mt-3">
+                        <EvidenceBlock urls={evidenceUrls} />
+                      </div>
+                    ) : null}
                   </>
                 ) : (
                   <>
@@ -351,9 +310,11 @@ function ReportContent({ id, reportItems, summary, createdAt, summaryImageUrl })
                       </div>
                     </div>
 
-                    <div className="mt-3">
-                      <EvidenceBlock urls={evidenceUrls} />
-                    </div>
+                    {evidenceUrls.length ? (
+                      <div className="mt-3">
+                        <EvidenceBlock urls={evidenceUrls} />
+                      </div>
+                    ) : null}
                   </>
                 )}
               </div>
@@ -655,13 +616,13 @@ export default function ApprovePanel({
           }
 
           #report-print-area .report-first-page {
-            page-break-after: always !important;
-            break-after: page !important;
+            page-break-after: auto !important;
+            break-after: auto !important;
           }
 
           #report-print-area .report-item-page {
-            page-break-before: always !important;
-            break-before: page !important;
+            page-break-before: auto !important;
+            break-before: auto !important;
             page-break-inside: avoid !important;
             break-inside: avoid !important;
           }
@@ -706,9 +667,9 @@ export default function ApprovePanel({
                   보고서 보기
                 </Button>
                 <Button
-                  variant="outline"
+                  variant="primary"
                   onClick={handlePrintReport}
-                  className="h-8 px-3 text-xs bg-black text-white border-black hover:bg-slate-900 hover:border-slate-900"
+                  className="h-8 px-3 text-xs !bg-black !text-white !border-black hover:!bg-slate-900 hover:!border-slate-900"
                 >
                   PDF로 저장(인쇄)
                 </Button>
@@ -923,9 +884,9 @@ export default function ApprovePanel({
           onClose={() => setOpenReport(false)}
           footer={
             <Button
-              variant="outline"
+              variant="primary"
               onClick={handlePrintReport}
-              className="bg-black text-white border-black hover:bg-slate-900 hover:border-slate-900"
+              className="!bg-black !text-white !border-black hover:!bg-slate-900 hover:!border-slate-900"
             >
               PDF로 저장(인쇄)
             </Button>
