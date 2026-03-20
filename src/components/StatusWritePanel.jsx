@@ -5,6 +5,7 @@ import { updateChecklistByCode } from "../api/checklist";
 import Button from "../ui/Button";
 import EvidenceModalTrigger from "./EvidenceModalTrigger";
 import TopProgressBar from "./TopProgressBar";
+import { MAX_EVIDENCE_FILES, parseEvidenceUrls, serializeEvidenceUrls } from "../utils/evidence";
 
 function safeStr(v) {
   return v == null ? "" : String(v);
@@ -110,6 +111,7 @@ export default function StatusWritePanel({ checklistItems = [], onUpdated }) {
   const [deletingCode, setDeletingCode] = useState(null);
 
   const textareasRef = useRef({});
+  const fileInputRefs = useRef({});
 
   function autoResizeTextarea(el) {
     if (!el) return;
@@ -138,9 +140,48 @@ export default function StatusWritePanel({ checklistItems = [], onUpdated }) {
     }));
   }
 
-  function setFile(code, file) {
+  function setFiles(code, files) {
     const key = safeStr(code);
-    setFileByCode((prev) => ({ ...prev, [key]: file || null }));
+    setFileByCode((prev) => ({ ...prev, [key]: files || [] }));
+  }
+
+  function setFileInputRef(code, el) {
+    if (!el) return;
+    fileInputRefs.current[safeStr(code)] = el;
+  }
+
+  function openFilePicker(code) {
+    fileInputRefs.current[safeStr(code)]?.click();
+  }
+
+  function addSelectedFiles(code, fileList, row) {
+    const key = safeStr(code);
+    const selected = Array.from(fileList || []);
+    if (!selected.length) return;
+
+    const uploadedCount = parseEvidenceUrls(row?.evidence_url).length;
+    setFileByCode((prev) => {
+      const existing = Array.isArray(prev[key]) ? prev[key] : [];
+      const remain = Math.max(0, MAX_EVIDENCE_FILES - uploadedCount - existing.length);
+      const addable = selected.slice(0, remain);
+
+      if (selected.length > addable.length) {
+        alert(`증적 파일은 최대 ${MAX_EVIDENCE_FILES}개까지 추가할 수 있습니다.`);
+      }
+
+      return { ...prev, [key]: [...existing, ...addable] };
+    });
+  }
+
+  function removeSelectedFile(code, index) {
+    const key = safeStr(code);
+    setFileByCode((prev) => {
+      const existing = Array.isArray(prev[key]) ? prev[key] : [];
+      return {
+        ...prev,
+        [key]: existing.filter((_, i) => i !== index),
+      };
+    });
   }
 
   // ✅ 옵션들: 코드 순서 기준 첫 등장 순서
@@ -198,7 +239,7 @@ export default function StatusWritePanel({ checklistItems = [], onUpdated }) {
         x.status,
         x.reason,
         x.result_detail,
-        x.evidence_url,
+        ...parseEvidenceUrls(x.evidence_url),
       ]
         .map((v) => safeStr(v).toLowerCase())
         .join(" | ");
@@ -255,30 +296,46 @@ export default function StatusWritePanel({ checklistItems = [], onUpdated }) {
 
   async function uploadEvidenceIfAny(row) {
     const code = safeStr(row.code);
-    const file = fileByCode[code];
+    const selectedFiles = Array.isArray(fileByCode[code]) ? fileByCode[code] : [];
+    const existingUrls = parseEvidenceUrls(row.evidence_url);
 
-    if (!file) return safeStr(row.evidence_url || "");
+    if (!selectedFiles.length) return existingUrls;
 
-    const safeCode = sanitizePathSegment(code);
-    const safeName = sanitizeFileName(file.name);
-    const filePath = `${safeCode}/${Date.now()}_${safeName}`;
+    const remain = Math.max(0, MAX_EVIDENCE_FILES - existingUrls.length);
+    if (remain <= 0) {
+      alert(`증적 파일은 최대 ${MAX_EVIDENCE_FILES}개까지 저장됩니다.`);
+      return existingUrls;
+    }
+
+    const uploadingFiles = selectedFiles.slice(0, remain);
+    if (selectedFiles.length > uploadingFiles.length) {
+      alert(`최대 ${MAX_EVIDENCE_FILES}개만 저장되며 초과 파일은 제외됩니다.`);
+    }
 
     setUploadingCode(code);
+    const uploadedUrls = [];
 
-    const { error: uploadError } = await supabase.storage.from("evidence").upload(filePath, file, {
-      upsert: true,
-      cacheControl: "3600",
-      contentType: file.type || "application/octet-stream",
-    });
+    for (const file of uploadingFiles) {
+      const safeCode = sanitizePathSegment(code);
+      const safeName = sanitizeFileName(file.name);
+      const filePath = `${safeCode}/${Date.now()}_${safeName}`;
 
-    if (uploadError) throw new Error("업로드 실패: " + uploadError.message);
+      const { error: uploadError } = await supabase.storage.from("evidence").upload(filePath, file, {
+        upsert: true,
+        cacheControl: "3600",
+        contentType: file.type || "application/octet-stream",
+      });
 
-    const { data } = supabase.storage.from("evidence").getPublicUrl(filePath);
-    const url = data?.publicUrl || "";
-    if (!url) throw new Error("업로드는 성공했지만 public URL 생성 실패");
+      if (uploadError) throw new Error("업로드 실패: " + uploadError.message);
 
-    setFile(code, null);
-    return url;
+      const { data } = supabase.storage.from("evidence").getPublicUrl(filePath);
+      const url = data?.publicUrl || "";
+      if (!url) throw new Error("업로드는 성공했지만 public URL 생성 실패");
+      uploadedUrls.push(url);
+    }
+
+    setFiles(code, []);
+    return [...existingUrls, ...uploadedUrls].slice(0, MAX_EVIDENCE_FILES);
   }
 
   async function handleSave(row) {
@@ -286,42 +343,32 @@ export default function StatusWritePanel({ checklistItems = [], onUpdated }) {
 
     try {
       setSavingCode(code);
-      console.log("[SAVE] start", code);
 
       const draft = getDraft(code, row);
       const statusValue = safeStr(draft.status).trim();
-      console.log("[SAVE] draft ready", { code, statusValue });
 
-      console.log("[SAVE] before uploadEvidenceIfAny");
-      const evidenceUrl = await uploadEvidenceIfAny(row);
-      console.log("[SAVE] after uploadEvidenceIfAny", evidenceUrl);
+      const evidenceUrls = await uploadEvidenceIfAny(row);
+      const serializedEvidence = serializeEvidenceUrls(evidenceUrls);
 
-      console.log("[SAVE] before updateChecklistByCode");
       await updateChecklistByCode(code, {
         status: statusValue === "" ? null : statusValue,
-        evidence_url: evidenceUrl === "" ? null : evidenceUrl,
+        evidence_url: serializedEvidence,
       });
-      console.log("[SAVE] after updateChecklistByCode");
 
       onUpdated?.();
       alert("저장 완료");
     } catch (e) {
-      console.error("[SAVE] error", e);
+      console.error("save error", e);
       alert(e?.message || "저장 실패");
     } finally {
-      console.log("[SAVE] finally");
       setSavingCode(null);
       setUploadingCode(null);
     }
   }
 
-  function clearSelectedFile(code) {
-    setFile(code, null);
-  }
-
-  async function deleteUploadedEvidence(row) {
+  async function deleteUploadedEvidence(row, targetUrl) {
     const code = safeStr(row.code);
-    const url = safeStr(row.evidence_url).trim();
+    const url = safeStr(targetUrl).trim();
     if (!url) return;
 
     if (!confirm("업로드된 증적을 삭제할까요? (스토리지/DB에서 제거됩니다)")) return;
@@ -336,7 +383,8 @@ export default function StatusWritePanel({ checklistItems = [], onUpdated }) {
         if (rmErr) throw new Error("스토리지 삭제 실패: " + rmErr.message);
       }
 
-      await updateChecklistByCode(code, { evidence_url: null });
+      const remained = parseEvidenceUrls(row.evidence_url).filter((x) => x !== url);
+      await updateChecklistByCode(code, { evidence_url: serializeEvidenceUrls(remained) });
 
       onUpdated?.();
       alert("증적 삭제 완료");
@@ -438,11 +486,10 @@ export default function StatusWritePanel({ checklistItems = [], onUpdated }) {
           const title = `[${code}] ${safeStr(row.itemCode ?? row.itemcode)}`;
           const draft = getDraft(code, row);
           const guideText = safeStr(row.guide ?? row.Guide).trim();
-          const selectedFile = fileByCode[code];
+          const selectedFiles = Array.isArray(fileByCode[code]) ? fileByCode[code] : [];
           const busy = savingCode === code || uploadingCode === code || deletingCode === code;
 
-          const evidenceUrl = safeStr(row.evidence_url).trim();
-          const isImg = evidenceUrl && isImageUrl(evidenceUrl);
+          const evidenceUrls = parseEvidenceUrls(row.evidence_url);
 
           return (
             <div
@@ -488,43 +535,31 @@ export default function StatusWritePanel({ checklistItems = [], onUpdated }) {
 
               <div className="space-y-1">
                 <div className="flex items-center gap-3 flex-wrap">
-                  <input type="file" onChange={(e) => setFile(code, e.target.files?.[0] || null)} className="text-sm shrink-0" />
+                  <input
+                    ref={(el) => setFileInputRef(code, el)}
+                    type="file"
+                    multiple
+                    onChange={(e) => {
+                      addSelectedFiles(code, e.target.files, row);
+                      e.target.value = "";
+                    }}
+                    className="hidden"
+                    hidden
+                  />
+                  <Button
+                    variant="outline"
+                    onClick={() => openFilePicker(code)}
+                    className="h-8 px-3 text-sm"
+                    disabled={evidenceUrls.length + selectedFiles.length >= MAX_EVIDENCE_FILES}
+                  >
+                    파일 추가
+                  </Button>
 
-                  <div className="min-w-[160px] text-sm leading-[1.35] text-slate-700 truncate">
-                    {selectedFile ? `선택됨: ${selectedFile.name}` : "선택된 파일 없음"}
+                  <div className="text-xs text-slate-500">
+                    {evidenceUrls.length === 0 && selectedFiles.length === 0
+                      ? "선택된 파일 없음"
+                      : `최대 ${MAX_EVIDENCE_FILES}개 (저장됨 ${evidenceUrls.length} / 선택됨 ${selectedFiles.length})`}
                   </div>
-
-                  {selectedFile ? (
-                    <button
-                      type="button"
-                      onClick={() => clearSelectedFile(code)}
-                      className="h-6 w-6 rounded-full border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-slate-700 flex items-center justify-center shrink-0"
-                      title="선택한 파일 제거"
-                    >
-                      ✕
-                    </button>
-                  ) : null}
-
-                  {evidenceUrl ? (
-                    <div className="flex items-center gap-2 shrink-0">
-                      <EvidenceModalTrigger
-                        url={evidenceUrl}
-                        imageClassName="h-16 w-16 rounded-lg border border-slate-200 object-cover hover:opacity-90"
-                        linkClassName="text-sm text-blue-600 underline whitespace-nowrap"
-                        fit={isImg ? "cover" : "contain"}
-                      />
-
-                      <button
-                        type="button"
-                        onClick={() => deleteUploadedEvidence(row)}
-                        disabled={deletingCode === code}
-                        className="h-6 w-6 rounded-full border border-rose-200 text-rose-600 hover:bg-rose-50 hover:text-rose-700 flex items-center justify-center disabled:opacity-50"
-                        title="업로드된 증적 삭제"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  ) : null}
 
                   <div className="ml-auto shrink-0">
                     <Button onClick={() => handleSave(row)} disabled={busy}>
@@ -533,8 +568,53 @@ export default function StatusWritePanel({ checklistItems = [], onUpdated }) {
                   </div>
                 </div>
 
+                {selectedFiles.length ? (
+                  <div className="flex flex-wrap gap-2">
+                    {selectedFiles.map((file, idx) => (
+                      <div key={`${file.name}-${idx}`} className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1">
+                        <span className="max-w-[220px] truncate text-xs text-slate-700">{file.name}</span>
+                        <button
+                          type="button"
+                          onClick={() => removeSelectedFile(code, idx)}
+                          className="h-5 w-5 rounded-full border border-slate-200 text-slate-500 hover:bg-slate-100 hover:text-slate-700 flex items-center justify-center"
+                          title="선택한 파일 제거"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+
+                {evidenceUrls.length ? (
+                  <div className="flex flex-wrap items-center gap-2">
+                    {evidenceUrls.map((url, idx) => {
+                      const isImg = isImageUrl(url);
+                      return (
+                        <div key={`${url}-${idx}`} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-2 py-1">
+                          <EvidenceModalTrigger
+                            url={url}
+                            imageClassName="h-14 w-14 rounded-lg border border-slate-200 object-cover hover:opacity-90"
+                            linkClassName="text-sm text-blue-600 underline whitespace-nowrap"
+                            fit={isImg ? "cover" : "contain"}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => deleteUploadedEvidence(row, url)}
+                            disabled={deletingCode === code}
+                            className="h-6 w-6 rounded-full border border-rose-200 text-rose-600 hover:bg-rose-50 hover:text-rose-700 flex items-center justify-center disabled:opacity-50"
+                            title="업로드된 증적 삭제"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : null}
+
                 <div className="text-xs leading-[1.35] text-slate-400">
-                  * 파일을 선택한 뒤 <b>저장</b>을 누르면 업로드 + 링크 저장까지 함께 처리됩니다.
+                  * 파일을 추가한 뒤 <b>저장</b>을 누르면 업로드 + 링크 저장이 처리됩니다.
                 </div>
               </div>
             </div>

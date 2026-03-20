@@ -2,6 +2,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import Button from "../ui/Button";
 import EvidenceModalTrigger from "./EvidenceModalTrigger";
+import { parseEvidenceUrls } from "../utils/evidence";
 
 function safeStr(v) {
   return v == null ? "" : String(v);
@@ -99,23 +100,28 @@ function Modal({ open, title, onClose, children, footer }) {
 /* -----------------------------
   Evidence
 ------------------------------ */
-function EvidenceBlock({ url }) {
-  const u = safeStr(url).trim();
+function EvidenceBlock({ urls = [] }) {
+  const list = Array.isArray(urls) ? urls : [];
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white px-3 py-2">
       <div className="text-sm font-bold text-slate-900">증적</div>
 
       <div className="mt-2">
-        {!u ? (
+        {!list.length ? (
           <div className="text-sm text-slate-800 whitespace-pre-wrap break-words">—</div>
         ) : (
-          <EvidenceModalTrigger
-            url={u}
-            imageClassName="max-h-[640px] rounded-xl border border-slate-200 object-contain hover:opacity-90"
-            linkClassName="inline-flex items-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-            fit="contain"
-          />
+          <div className="flex flex-wrap gap-2">
+            {list.map((u, idx) => (
+              <EvidenceModalTrigger
+                key={`${u}-${idx}`}
+                url={u}
+                imageClassName="max-h-[640px] rounded-xl border border-slate-200 object-contain hover:opacity-90"
+                linkClassName="inline-flex items-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                fit="contain"
+              />
+            ))}
+          </div>
         )}
       </div>
     </div>
@@ -219,7 +225,7 @@ function ReportContent({ id, reportItems, summary, createdAt, summaryImageUrl })
             const code = safeStr(row.code);
             const title = safeStr(row.itemCode || row.itemcode || "");
             const statusText = safeStr(row.status).trim();
-            const evidenceUrl = safeStr(row.evidence_url).trim();
+            const evidenceUrls = parseEvidenceUrls(row.evidence_url);
             const resultText = safeStr(row.result).trim() || "미입력";
             const isOk = resultText === "양호";
             const isVuln = resultText === "취약";
@@ -258,7 +264,7 @@ function ReportContent({ id, reportItems, summary, createdAt, summaryImageUrl })
                         {statusText || "—"}
                       </div>
                     </div>
-                    <EvidenceBlock url={evidenceUrl} />
+                    <EvidenceBlock urls={evidenceUrls} />
                   </div>
                 ) : isVuln ? (
                   <>
@@ -286,7 +292,7 @@ function ReportContent({ id, reportItems, summary, createdAt, summaryImageUrl })
                     </div>
 
                     <div className="mt-3">
-                      <EvidenceBlock url={evidenceUrl} />
+                      <EvidenceBlock urls={evidenceUrls} />
                     </div>
                   </>
                 ) : (
@@ -346,7 +352,7 @@ function ReportContent({ id, reportItems, summary, createdAt, summaryImageUrl })
                     </div>
 
                     <div className="mt-3">
-                      <EvidenceBlock url={evidenceUrl} />
+                      <EvidenceBlock urls={evidenceUrls} />
                     </div>
                   </>
                 )}
@@ -766,7 +772,7 @@ export default function ApprovePanel({
           const code = safeStr(row.code);
           const title = safeStr(row.itemCode || row.itemcode || "");
           const statusText = safeStr(row.status).trim();
-          const evidenceUrl = safeStr(row.evidence_url).trim();
+          const evidenceUrls = parseEvidenceUrls(row.evidence_url);
           const checked = selectedCodes.includes(code);
           const resultText = safeStr(row.result).trim() || "미입력";
           const isOk = resultText === "양호";
@@ -815,7 +821,7 @@ export default function ApprovePanel({
                       {statusText || "—"}
                     </div>
                   </div>
-                  <EvidenceBlock url={evidenceUrl} />
+                  <EvidenceBlock urls={evidenceUrls} />
                 </div>
               ) : isVuln ? (
                 <>
@@ -842,7 +848,7 @@ export default function ApprovePanel({
                     </div>
                   </div>
 
-                  <EvidenceBlock url={evidenceUrl} />
+                  <EvidenceBlock urls={evidenceUrls} />
                 </>
               ) : (
                 <>
@@ -900,7 +906,7 @@ export default function ApprovePanel({
                     </div>
                   </div>
 
-                  <EvidenceBlock url={evidenceUrl} />
+                  <EvidenceBlock urls={evidenceUrls} />
                 </>
               )}
             </div>

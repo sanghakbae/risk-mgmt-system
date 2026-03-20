@@ -3,6 +3,7 @@ import Button from "../ui/Button";
 import { updateChecklistByCode } from "../api/checklist";
 import EvidenceModalTrigger from "./EvidenceModalTrigger";
 import TopProgressBar from "./TopProgressBar";
+import { parseEvidenceUrls } from "../utils/evidence";
 
 const PAGE_SIZE = 20;
 const TYPE_ALL = "전체";
@@ -68,22 +69,24 @@ function getVulnBlockMessage(totalCount, doneCount) {
   return `Status 단계가 완료되어야 취약 여부 식별이 가능합니다. (${doneCount}/${totalCount} 완료)`;
 }
 
-function EvidencePreview({ url }) {
-  const u = safeStr(url).trim();
-  if (!u) return null;
+function EvidencePreview({ urls = [] }) {
+  if (!urls.length) return null;
 
   return (
     <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
       <div className="text-sm font-bold text-slate-800">증적</div>
 
-      <div className="mt-2">
-        <EvidenceModalTrigger
-          url={u}
-          imageClassName="h-20 w-32 rounded-xl border border-slate-200 object-cover hover:opacity-90"
-          linkClassName="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-          hint="클릭하면 팝업 보기"
-          fit="contain"
-        />
+      <div className="mt-2 flex flex-wrap gap-2">
+        {urls.map((u, idx) => (
+          <EvidenceModalTrigger
+            key={`${u}-${idx}`}
+            url={u}
+            imageClassName="h-20 w-32 rounded-xl border border-slate-200 object-cover hover:opacity-90"
+            linkClassName="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            hint="클릭하면 팝업 보기"
+            fit="contain"
+          />
+        ))}
       </div>
     </div>
   );
@@ -131,7 +134,7 @@ function RowCard({ row, isSaving, onSave, editable, blockMessage }) {
 
   const statusText = safeStr(row.status ?? row.current_status ?? row.state).trim();
   const guideText = safeStr(row.guide ?? row.Guide).trim();
-  const evidenceUrl = safeStr(row.evidence_url).trim();
+  const evidenceUrls = parseEvidenceUrls(row.evidence_url);
 
   return (
     <div className="w-full max-w-none rounded-2xl border border-slate-200 bg-white p-5 space-y-3">
@@ -205,7 +208,7 @@ function RowCard({ row, isSaving, onSave, editable, blockMessage }) {
 
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="min-w-0">
-          {evidenceUrl ? <EvidencePreview url={evidenceUrl} /> : null}
+          {evidenceUrls.length ? <EvidencePreview urls={evidenceUrls} /> : null}
         </div>
 
         <div className="ml-auto flex items-center gap-3">

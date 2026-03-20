@@ -3,6 +3,7 @@ import Button from "../ui/Button";
 import { updateChecklistByCode } from "../api/checklist";
 import EvidenceModalTrigger from "./EvidenceModalTrigger";
 import TopProgressBar from "./TopProgressBar";
+import { parseEvidenceUrls } from "../utils/evidence";
 
 const PAGE_SIZE = 5;
 
@@ -108,18 +109,20 @@ function badgeClassFromRisk(n) {
 const L_LABEL = { 1: "Unlikely", 2: "Likely", 3: "Highly Likely" };
 const I_LABEL = { 1: "Low", 2: "Medium", 3: "High" };
 
-function EvidencePreviewInline({ url }) {
-  const u = safeStr(url).trim();
-  if (!u) return null;
+function EvidencePreviewInline({ urls = [] }) {
+  if (!urls.length) return null;
 
   return (
-    <div className="flex items-center gap-2">
-      <EvidenceModalTrigger
-        url={u}
-        imageClassName="h-12 w-12 rounded-lg border border-slate-200 object-cover hover:opacity-90"
-        linkClassName="text-sm text-blue-600 underline"
-        fit="contain"
-      />
+    <div className="flex items-center gap-2 flex-wrap">
+      {urls.map((u, idx) => (
+        <EvidenceModalTrigger
+          key={`${u}-${idx}`}
+          url={u}
+          imageClassName="h-12 w-12 rounded-lg border border-slate-200 object-cover hover:opacity-90"
+          linkClassName="text-sm text-blue-600 underline"
+          fit="contain"
+        />
+      ))}
     </div>
   );
 }
@@ -134,7 +137,7 @@ function RiskCard({ row, draft, onChangeDraft, onSave, saving, editable, blockMe
   const guideText = safeStr(row.guide ?? row.Guide).trim();
   const statusText = safeStr(row.status ?? row.current_status ?? row.state).trim();
   const reasonText = safeStr(row.reason ?? row.result_detail).trim();
-  const evidenceUrl = safeStr(row.evidence_url).trim();
+  const evidenceUrls = parseEvidenceUrls(row.evidence_url);
 
   const l = draft.likelihood === "" ? null : Number(draft.likelihood);
   const i = draft.impact === "" ? null : Number(draft.impact);
@@ -185,20 +188,20 @@ function RiskCard({ row, draft, onChangeDraft, onSave, saving, editable, blockMe
             {statusText}
           </div>
 
-          {evidenceUrl ? (
+          {evidenceUrls.length ? (
             <div className="mt-2">
-              <EvidencePreviewInline url={evidenceUrl} />
+              <EvidencePreviewInline urls={evidenceUrls} />
             </div>
           ) : null}
         </div>
-      ) : evidenceUrl ? (
+      ) : evidenceUrls.length ? (
         <div className="rounded-2xl border border-slate-200 bg-white px-3 py-2">
           <div className="mb-1 flex items-center gap-2">
             <span className="inline-block h-3 w-3 rounded-sm border border-slate-400 bg-slate-300" />
             <span className="text-sm font-semibold text-slate-900">증적</span>
           </div>
           <div className="mt-2">
-            <EvidencePreviewInline url={evidenceUrl} />
+            <EvidencePreviewInline urls={evidenceUrls} />
           </div>
         </div>
       ) : null}
