@@ -63,7 +63,10 @@ function isChecklistDefined(row) {
 }
 
 export default function ChecklistPanel({ checklistItems = [] }) {
-  const rows = useMemo(() => (Array.isArray(checklistItems) ? checklistItems : []), [checklistItems]);
+  const rows = useMemo(() => {
+    const base = Array.isArray(checklistItems) ? checklistItems : [];
+    return [...base].sort((a, b) => compareCode(a?.code, b?.code));
+  }, [checklistItems]);
 
   // ✅ 필터: 유형 → 영역 → 도메인
   const [typeFilter, setTypeFilter] = useState("전체");
@@ -225,7 +228,7 @@ export default function ChecklistPanel({ checklistItems = [] }) {
         return;
       }
 
-      const out = Array.isArray(data) ? data : [];
+      const out = (Array.isArray(data) ? data : []).sort((a, b) => compareCode(a?.code, b?.code));
       if (!out.length) {
         alert("내보낼 데이터가 없습니다.");
         return;

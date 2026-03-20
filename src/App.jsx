@@ -58,12 +58,32 @@ const ADMIN_STEPS = [
   { key: "admin_access", title: "Access Control", desc: "권한 관리", icon: <Users className="w-4 h-4" /> },
 ];
 
+function safeStr(v) {
+  return v == null ? "" : String(v);
+}
+
+function compareChecklistCode(a, b) {
+  const aa = safeStr(a).split(".").map((x) => Number(x));
+  const bb = safeStr(b).split(".").map((x) => Number(x));
+  const len = Math.max(aa.length, bb.length);
+
+  for (let i = 0; i < len; i += 1) {
+    const av = Number.isFinite(aa[i]) ? aa[i] : -1;
+    const bv = Number.isFinite(bb[i]) ? bb[i] : -1;
+    if (av !== bv) return av - bv;
+  }
+
+  return safeStr(a).localeCompare(safeStr(b));
+}
+
 function normalizeChecklistRows(rows) {
-  return (rows ?? []).map((r) => ({
-    ...r,
-    itemCode: r.itemCode ?? r.itemcode ?? "",
-    Guide: r.Guide ?? r.guide ?? r["Guide"] ?? "",
-  }));
+  return (rows ?? [])
+    .map((r) => ({
+      ...r,
+      itemCode: r.itemCode ?? r.itemcode ?? "",
+      Guide: r.Guide ?? r.guide ?? r["Guide"] ?? "",
+    }))
+    .sort((a, b) => compareChecklistCode(a?.code, b?.code));
 }
 
 function normalizeDomains(rawValue) {
