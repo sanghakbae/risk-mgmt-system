@@ -4,7 +4,7 @@ import Button from "../ui/Button";
 import { fetchAuditLogs } from "../api/admin";
 
 function cardClass() {
-  return "rounded-2xl border border-slate-200 bg-white p-5";
+  return "rounded-2xl border border-slate-200 bg-white p-4";
 }
 
 function formatDateTime(v) {
@@ -66,12 +66,12 @@ export default function AdminAuditLogsPanel({ reloadKey }) {
   }, [logs]);
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <div className={cardClass()}>
         <div className="flex flex-col lg:flex-row lg:items-end gap-3 lg:justify-between">
           <div>
-            <div className="text-lg font-bold text-slate-900">감사 로그</div>
-            <div className="text-sm text-slate-500 mt-1">관리자만 조회할 수 있습니다.</div>
+            <div className="panel-banner-title text-slate-900">감사 로그</div>
+            <div className="panel-banner-body text-slate-500">관리자만 조회할 수 있습니다.</div>
           </div>
 
           <div className="flex flex-col md:flex-row gap-2">
@@ -115,7 +115,7 @@ export default function AdminAuditLogsPanel({ reloadKey }) {
         ) : logs.length === 0 ? (
           <div className="text-slate-500">조회된 로그가 없습니다.</div>
         ) : (
-          <div className="overflow-auto">
+          <div className="max-h-[420px] overflow-auto">
             <table className="w-full min-w-[960px] text-sm">
               <thead>
                 <tr className="border-b border-slate-200 text-left text-slate-500">

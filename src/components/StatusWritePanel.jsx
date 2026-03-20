@@ -3,6 +3,8 @@ import React, { useMemo, useState, useEffect, useRef } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { updateChecklistByCode } from "../api/checklist";
 import Button from "../ui/Button";
+import EvidenceModalTrigger from "./EvidenceModalTrigger";
+import TopProgressBar from "./TopProgressBar";
 
 function safeStr(v) {
   return v == null ? "" : String(v);
@@ -65,6 +67,10 @@ function buildOrderedUniqueOptions(rows, valueGetter) {
 function isImageUrl(url) {
   const u = safeStr(url).trim().toLowerCase();
   return /\.(png|jpg|jpeg|gif|webp|bmp|svg)(\?.*)?$/.test(u);
+}
+
+function isStatusCompleted(row) {
+  return safeStr(row?.status ?? row?.current_status ?? row?.state).trim() !== "";
 }
 
 // Supabase public url에서 bucket 내 object path 뽑기
@@ -221,6 +227,8 @@ export default function StatusWritePanel({ checklistItems = [], onUpdated }) {
     return filteredRows.slice(start, start + pageSize);
   }, [filteredRows, pageSafe]);
 
+  const statusDoneCount = useMemo(() => rows.filter(isStatusCompleted).length, [rows]);
+
   // ✅ 페이지 버튼(최대 10개)
   const maxPageButtons = 10;
   const pageNumbers = useMemo(() => {
@@ -343,9 +351,13 @@ export default function StatusWritePanel({ checklistItems = [], onUpdated }) {
   const bodyCls = "text-sm text-slate-800 whitespace-pre-wrap break-words";
 
   return (
-    <div className="h-[calc(100vh-180px)] flex flex-col gap-4 w-full max-w-none">
-      <div className="sticky top-0 z-10 -mx-6 px-6 bg-slate-50/95 backdrop-blur pt-1">
-        <div className="rounded-2xl border border-slate-200 bg-white p-4">
+    <div className="panel-shell flex flex-col gap-4 w-full max-w-none">
+      <div className="panel-sticky">
+        <div className="mb-4">
+          <TopProgressBar title="Status 작성 진행률" done={statusDoneCount} total={rows.length} />
+        </div>
+
+        <div className="panel-filter-card rounded-2xl border border-slate-200 bg-white p-4">
           <div className="flex items-center gap-2 flex-wrap">
             <select
               value={typeFilter}
@@ -419,8 +431,13 @@ export default function StatusWritePanel({ checklistItems = [], onUpdated }) {
       <div className="flex-1 min-h-0 overflow-y-auto pr-1 pb-6 space-y-3">
         {pageRows.map((row) => {
           const code = safeStr(row.code);
+          const typeText = normalizeType(row.type);
+          const areaText = safeStr(row.area).trim();
+          const domainText = safeStr(row.domain).trim();
+          const metaLine = [typeText, areaText, domainText].filter(Boolean).join(" · ");
           const title = `[${code}] ${safeStr(row.itemCode ?? row.itemcode)}`;
           const draft = getDraft(code, row);
+          const guideText = safeStr(row.guide ?? row.Guide).trim();
           const selectedFile = fileByCode[code];
           const busy = savingCode === code || uploadingCode === code || deletingCode === code;
 
@@ -428,11 +445,33 @@ export default function StatusWritePanel({ checklistItems = [], onUpdated }) {
           const isImg = evidenceUrl && isImageUrl(evidenceUrl);
 
           return (
-            <div key={code} className="rounded-2xl border border-slate-200 bg-white p-5 space-y-4">
-              <div className="text-sm font-bold text-slate-900 whitespace-pre-wrap">{title}</div>
-
+            <div
+              key={code}
+              className="rounded-2xl border border-slate-200 bg-white p-5 space-y-4"
+              style={{ lineHeight: 1.35 }}
+            >
               <div className="space-y-1">
-                <div className={labelCls}>현황</div>
+                {metaLine ? (
+                  <div className="text-xs leading-[1.35] text-slate-500 break-words">{metaLine}</div>
+                ) : null}
+                <div className="text-sm leading-[1.35] font-extrabold text-slate-900 break-words">{title}</div>
+              </div>
+
+              {guideText ? (
+                <div className="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2">
+                  <div className="mb-1 flex items-center gap-2">
+                    <span className="inline-block h-3 w-3 rounded-sm border border-sky-400 bg-sky-300" />
+                    <span className="text-sm leading-[1.35] font-bold text-sky-800">가이드</span>
+                  </div>
+                  <div className="text-sm leading-[1.35] font-bold text-sky-800 whitespace-pre-wrap break-words">{guideText}</div>
+                </div>
+              ) : null}
+
+              <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
+                <div className="mb-2 flex items-center gap-2">
+                  <span className="inline-block h-3 w-3 rounded-sm border border-slate-400 bg-slate-300" />
+                  <span className="text-sm leading-[1.35] font-bold text-slate-800">현황</span>
+                </div>
                 <textarea
                   ref={(el) => setTextareaRef(code, el)}
                   value={draft.status}
@@ -441,60 +480,39 @@ export default function StatusWritePanel({ checklistItems = [], onUpdated }) {
                     autoResizeTextarea(e.target);
                   }}
                   rows={3}
-                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200 resize-none overflow-hidden"
+                  className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm leading-[1.35] outline-none focus:ring-2 focus:ring-slate-200 resize-none overflow-hidden"
+                  style={{ lineHeight: 1.35 }}
                   placeholder="통제 이행 현황을 입력하세요"
                 />
               </div>
 
               <div className="space-y-1">
-                <div className={labelCls}>증적 업로드</div>
-
                 <div className="flex items-center gap-3 flex-wrap">
-                  <input type="file" onChange={(e) => setFile(code, e.target.files?.[0] || null)} className="text-sm" />
+                  <input type="file" onChange={(e) => setFile(code, e.target.files?.[0] || null)} className="text-sm shrink-0" />
 
-                  <div className="flex items-center gap-2">
-                    <div className="text-sm text-slate-700">
-                      {selectedFile ? `선택됨: ${selectedFile.name}` : "선택된 파일 없음"}
-                    </div>
-
-                    {selectedFile ? (
-                      <button
-                        type="button"
-                        onClick={() => clearSelectedFile(code)}
-                        className="h-6 w-6 rounded-full border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-slate-700 flex items-center justify-center"
-                        title="선택한 파일 제거"
-                      >
-                        ✕
-                      </button>
-                    ) : null}
+                  <div className="min-w-[160px] text-sm leading-[1.35] text-slate-700 truncate">
+                    {selectedFile ? `선택됨: ${selectedFile.name}` : "선택된 파일 없음"}
                   </div>
 
+                  {selectedFile ? (
+                    <button
+                      type="button"
+                      onClick={() => clearSelectedFile(code)}
+                      className="h-6 w-6 rounded-full border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-slate-700 flex items-center justify-center shrink-0"
+                      title="선택한 파일 제거"
+                    >
+                      ✕
+                    </button>
+                  ) : null}
+
                   {evidenceUrl ? (
-                    <div className="flex items-center gap-2">
-                      {isImg ? (
-                        <a
-                          href={evidenceUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="block"
-                          title="원본 새 탭으로 열기"
-                        >
-                          <img
-                            src={evidenceUrl}
-                            alt="evidence"
-                            className="h-12 w-12 rounded-lg border border-slate-200 object-cover hover:opacity-90"
-                          />
-                        </a>
-                      ) : (
-                        <a
-                          href={evidenceUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-sm text-blue-600 underline"
-                        >
-                          업로드된 증적 보기
-                        </a>
-                      )}
+                    <div className="flex items-center gap-2 shrink-0">
+                      <EvidenceModalTrigger
+                        url={evidenceUrl}
+                        imageClassName="h-16 w-16 rounded-lg border border-slate-200 object-cover hover:opacity-90"
+                        linkClassName="text-sm text-blue-600 underline whitespace-nowrap"
+                        fit={isImg ? "cover" : "contain"}
+                      />
 
                       <button
                         type="button"
@@ -508,14 +526,14 @@ export default function StatusWritePanel({ checklistItems = [], onUpdated }) {
                     </div>
                   ) : null}
 
-                  <div className="ml-auto">
+                  <div className="ml-auto shrink-0">
                     <Button onClick={() => handleSave(row)} disabled={busy}>
                       {busy ? "처리 중..." : "저장"}
                     </Button>
                   </div>
                 </div>
 
-                <div className="text-sm text-slate-400">
+                <div className="text-xs leading-[1.35] text-slate-400">
                   * 파일을 선택한 뒤 <b>저장</b>을 누르면 업로드 + 링크 저장까지 함께 처리됩니다.
                 </div>
               </div>

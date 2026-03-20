@@ -8,7 +8,8 @@ export const supabase = createClient(
       flowType: "pkce", // ✅ HashRouter(#)와 충돌 방지
       persistSession: true,
       autoRefreshToken: true,
-      detectSessionInUrl: true,
+      // main.jsx에서 code 교환을 수동 처리하므로 중복 교환을 막는다.
+      detectSessionInUrl: false,
       storageKey: "sb-risk-mgmt-auth",
     },
   }

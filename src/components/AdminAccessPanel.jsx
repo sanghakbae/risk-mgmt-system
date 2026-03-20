@@ -4,7 +4,7 @@ import Button from "../ui/Button";
 import { fetchProfiles, fetchUserRoles, upsertUserRole, writeAuditLog } from "../api/admin";
 
 function cardClass() {
-  return "rounded-2xl border border-slate-200 bg-white p-5";
+  return "rounded-2xl border border-slate-200 bg-white p-4";
 }
 
 const ROLE_OPTIONS = ["admin", "user", "auditor"];
@@ -74,6 +74,8 @@ export default function AdminAccessPanel({ session, reloadKey, onChanged }) {
     });
   }, [profiles, roles, keyword]);
 
+  const useVerticalScroll = mergedRows.length > 10;
+
   async function handleSave(userId) {
     const target = mergedRows.find((x) => x.user_id === userId);
     const nextRole = draftRoles[userId] ?? "user";
@@ -111,12 +113,12 @@ export default function AdminAccessPanel({ session, reloadKey, onChanged }) {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <div className={cardClass()}>
         <div className="flex flex-col lg:flex-row lg:items-end gap-3 lg:justify-between">
           <div>
-            <div className="text-lg font-bold text-slate-900">권한 관리</div>
-            <div className="text-sm text-slate-500 mt-1">admin / user / auditor 권한을 관리합니다.</div>
+            <div className="panel-banner-title text-slate-900">권한 관리</div>
+            <div className="panel-banner-body text-slate-500">admin / user / auditor 권한을 관리합니다.</div>
           </div>
 
           <div className="flex gap-2">
@@ -141,17 +143,16 @@ export default function AdminAccessPanel({ session, reloadKey, onChanged }) {
         ) : mergedRows.length === 0 ? (
           <div className="text-slate-500">조회된 사용자가 없습니다.</div>
         ) : (
-          <div className="overflow-auto">
-            <table className="w-full min-w-[1100px] text-sm">
+          <div className={useVerticalScroll ? "max-h-[420px] overflow-y-auto overflow-x-hidden" : "overflow-visible"}>
+            <table className="w-full table-fixed text-sm">
               <thead>
-                <tr className="border-b border-slate-200 text-left text-slate-500">
-                  <th className="py-3 pr-3">Email</th>
-                  <th className="py-3 pr-3">이름</th>
-                  <th className="py-3 pr-3">현재 Role</th>
-                  <th className="py-3 pr-3">변경 Role</th>
-                  <th className="py-3 pr-3">마지막 로그인</th>
-                  <th className="py-3 pr-3">User ID</th>
-                  <th className="py-3 pr-3">작업</th>
+                <tr className="border-b border-slate-200 text-center text-slate-700 font-bold">
+                  <th className="py-3 px-2">Email</th>
+                  <th className="py-3 px-2">이름</th>
+                  <th className="py-3 px-2">현재 Role</th>
+                  <th className="py-3 px-2">변경 Role</th>
+                  <th className="py-3 px-2">마지막 로그인</th>
+                  <th className="py-3 px-2">작업</th>
                 </tr>
               </thead>
               <tbody>
@@ -161,9 +162,9 @@ export default function AdminAccessPanel({ session, reloadKey, onChanged }) {
 
                   return (
                     <tr key={row.user_id} className="border-b border-slate-100">
-                      <td className="py-3 pr-3 text-slate-900 font-medium">{row.email}</td>
-                      <td className="py-3 pr-3 text-slate-700">{row.display_name || "-"}</td>
-                      <td className="py-3 pr-3">
+                      <td className="py-2 px-2 text-center text-slate-900 font-medium break-all">{row.email}</td>
+                      <td className="py-2 px-2 text-center text-slate-700 break-words">{row.display_name || "-"}</td>
+                      <td className="py-2 px-2 text-center">
                         <span
                           className={[
                             "inline-flex rounded-full border px-2 py-1 text-xs font-semibold",
@@ -177,9 +178,9 @@ export default function AdminAccessPanel({ session, reloadKey, onChanged }) {
                           {row.role}
                         </span>
                       </td>
-                      <td className="py-3 pr-3">
+                      <td className="py-2 px-2 text-center">
                         <select
-                          className="rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-slate-400 bg-white"
+                          className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-slate-400 bg-white"
                           value={draftRole}
                           onChange={(e) =>
                             setDraftRoles((prev) => ({
@@ -195,12 +196,12 @@ export default function AdminAccessPanel({ session, reloadKey, onChanged }) {
                           ))}
                         </select>
                       </td>
-                      <td className="py-3 pr-3 text-slate-700 whitespace-nowrap">{formatDateTime(row.last_sign_in_at)}</td>
-                      <td className="py-3 pr-3 text-xs text-slate-500 break-all">{row.user_id}</td>
-                      <td className="py-3 pr-3">
+                      <td className="py-2 px-2 text-slate-700 whitespace-nowrap text-center">{formatDateTime(row.last_sign_in_at)}</td>
+                      <td className="py-2 px-2 text-center">
                         <Button
                           onClick={() => handleSave(row.user_id)}
                           disabled={savingUserId === row.user_id || !changed}
+                          className="h-8 px-3 min-w-[72px]"
                         >
                           저장
                         </Button>

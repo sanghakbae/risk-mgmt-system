@@ -116,7 +116,7 @@ function StrategyGuide() {
           <div className="text-xs text-slate-500">위험을 어떤 방식으로 처리할지 결정합니다.</div>
         </div>
 
-        <div className="text-[11px] px-2 py-1 rounded-full border border-slate-200 bg-slate-50 text-slate-600">
+        <div className="text-xs px-2 py-1 rounded-full border border-slate-200 bg-slate-50 text-slate-600">
           TIP
         </div>
       </div>
@@ -181,9 +181,9 @@ function StatPill({ label, value, tone = "slate" }) {
   };
 
   return (
-    <div className={["px-3 py-2 rounded-xl border text-sm flex items-center gap-2", toneMap[tone]].join(" ")}>
-      <span className="text-xs font-semibold opacity-80">{label}</span>
-      <span className="font-bold tabular-nums">{value}</span>
+    <div className={["px-2.5 py-1.5 rounded-lg border text-xs flex items-center gap-1.5", toneMap[tone]].join(" ")}>
+      <span className="text-[10px] font-semibold leading-[1.2] opacity-80">{label}</span>
+      <span className="text-xs font-semibold leading-[1.2] tabular-nums">{value}</span>
     </div>
   );
 }
@@ -253,6 +253,9 @@ function TreatmentCard({ row, isSaving, onSave, editable, blockMessage }) {
     .filter(Boolean)
     .join(" · ");
   const titleText = `[${row.code}] ${safeStr(row.itemCode)}`;
+  const guideText = safeStr(row.guide ?? row.Guide).trim();
+  const statusText = safeStr(row.status ?? row.current_status ?? row.state).trim();
+  const reasonText = safeStr(row.reason || row.result_detail).trim();
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-5 space-y-4">
@@ -272,137 +275,157 @@ function TreatmentCard({ row, isSaving, onSave, editable, blockMessage }) {
         </div>
       </div>
 
-      {safeStr(row.reason || row.result_detail) ? (
-        <div className="w-full rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700 whitespace-pre-wrap">
-          <div className="font-semibold mb-2">사유</div>
-          {safeStr(row.reason || row.result_detail)}
-        </div>
-      ) : null}
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <div>
-          <div className="text-xs font-semibold text-slate-700 mb-1">처리 전략</div>
-          <select
-            value={strategy}
-            onChange={(e) => setStrategy(e.target.value)}
-            disabled={!editable || isSaving}
-            className={[
-              "w-full rounded-xl border px-3 py-2 text-sm",
-              editable
-                ? "border-slate-200 bg-white"
-                : "border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed",
-            ].join(" ")}
-          >
-            <option value="수용">수용</option>
-            <option value="감소">감소</option>
-            <option value="회피">회피</option>
-            <option value="전가">전가</option>
-          </select>
-        </div>
-
-        <div>
-          <div className="text-xs font-semibold text-slate-700 mb-1">처리 상태</div>
-          <select
-            value={status}
-            onChange={(e) => setStatus(e.target.value)}
-            disabled={!editable || isSaving}
-            className={[
-              "w-full rounded-xl border px-3 py-2 text-sm",
-              editable
-                ? "border-slate-200 bg-white"
-                : "border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed",
-            ].join(" ")}
-          >
-            <option value="">선택</option>
-            <option value="계획">계획</option>
-            <option value="진행">진행</option>
-            <option value="완료">완료</option>
-            <option value="보류">보류</option>
-          </select>
-        </div>
-
-        <div>
-          <div className="text-xs font-semibold text-slate-700 mb-1">처리 담당</div>
-          <input
-            value={owner}
-            onChange={(e) => setOwner(e.target.value)}
-            disabled={!editable || isSaving}
-            className={[
-              "w-full rounded-xl border px-3 py-2 text-sm",
-              editable
-                ? "border-slate-200 bg-white"
-                : "border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed",
-            ].join(" ")}
-            placeholder="예: 홍길동"
-          />
-        </div>
-
-        <div>
-          <div className="text-xs font-semibold text-slate-700 mb-1">완료 기한</div>
-          <input
-            type="date"
-            value={due}
-            onChange={(e) => setDue(e.target.value)}
-            disabled={!editable || isSaving}
-            className={[
-              "w-full rounded-xl border px-3 py-2 text-sm",
-              editable
-                ? "border-slate-200 bg-white"
-                : "border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed",
-            ].join(" ")}
-          />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-        <div>
-          <div className="text-xs font-semibold text-slate-700 mb-1">처리 계획</div>
-          <textarea
-            ref={planRef}
-            value={plan}
-            rows={3}
-            disabled={!editable || isSaving}
-            onChange={(e) => {
-              setPlan(e.target.value);
-              autoResize(e.target);
-            }}
-            className={[
-              "w-full rounded-xl border px-3 py-2 text-sm resize-none overflow-hidden",
-              editable
-                ? "border-slate-200 bg-white"
-                : "border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed",
-            ].join(" ")}
-            placeholder="예: 패치 적용, 접근 통제 강화, 모니터링 룰 추가..."
-          />
-        </div>
-
-        <div>
-          <div className="text-xs font-semibold text-slate-700 mb-1">
-            수용 사유 <span className="text-slate-400">(수용 선택 시 필수)</span>
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
+        <div className="xl:col-span-4 space-y-3">
+          <div className="rounded-xl border border-sky-200 bg-sky-50 p-3">
+            <div className="text-sm font-semibold text-sky-800">가이드</div>
+            <div className="mt-1 text-sm text-sky-800 whitespace-pre-wrap break-words">
+              {guideText || "가이드 없음"}
+            </div>
           </div>
-          <textarea
-            ref={acceptRef}
-            value={acceptReason}
-            rows={3}
-            disabled={!editable || isSaving || strategy !== "수용"}
-            onChange={(e) => {
-              setAcceptReason(e.target.value);
-              autoResize(e.target);
-            }}
-            className={[
-              "w-full rounded-xl border px-3 py-2 text-sm resize-none overflow-hidden",
-              !editable || strategy !== "수용"
-                ? "border-slate-200 bg-slate-50 text-slate-400 cursor-not-allowed"
-                : "border-slate-200 bg-white",
-            ].join(" ")}
-            placeholder={
-              !editable
-                ? "선행 단계 전체 완료 후 입력 가능"
-                : strategy !== "수용"
-                  ? "수용 선택 시 입력 가능"
-                  : "예: 운영상 즉시 개선 어려움, 대체 통제 적용, 재평가 일정..."
-            }
-          />
+
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+            <div className="text-sm font-semibold text-emerald-800">현황</div>
+            <div className="mt-1 text-sm text-emerald-800 whitespace-pre-wrap break-words">
+              {statusText || "현황 미입력"}
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-rose-200 bg-rose-50 p-3">
+            <div className="text-sm font-semibold text-rose-700">사유</div>
+            <div className="mt-1 text-sm text-rose-700 whitespace-pre-wrap break-words">
+              {reasonText || "사유 없음"}
+            </div>
+          </div>
+        </div>
+
+        <div className="xl:col-span-8 space-y-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <div className="text-xs font-semibold text-slate-700 mb-1">처리 전략</div>
+              <select
+                value={strategy}
+                onChange={(e) => setStrategy(e.target.value)}
+                disabled={!editable || isSaving}
+                className={[
+                  "w-full rounded-xl border px-3 py-2 text-sm",
+                  editable
+                    ? "border-slate-200 bg-white"
+                    : "border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed",
+                ].join(" ")}
+              >
+                <option value="수용">수용</option>
+                <option value="감소">감소</option>
+                <option value="회피">회피</option>
+                <option value="전가">전가</option>
+              </select>
+            </div>
+
+            <div>
+              <div className="text-xs font-semibold text-slate-700 mb-1">처리 상태</div>
+              <select
+                value={status}
+                onChange={(e) => setStatus(e.target.value)}
+                disabled={!editable || isSaving}
+                className={[
+                  "w-full rounded-xl border px-3 py-2 text-sm",
+                  editable
+                    ? "border-slate-200 bg-white"
+                    : "border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed",
+                ].join(" ")}
+              >
+                <option value="">선택</option>
+                <option value="계획">계획</option>
+                <option value="진행">진행</option>
+                <option value="완료">완료</option>
+                <option value="보류">보류</option>
+              </select>
+            </div>
+
+            <div>
+              <div className="text-xs font-semibold text-slate-700 mb-1">처리 담당</div>
+              <input
+                value={owner}
+                onChange={(e) => setOwner(e.target.value)}
+                disabled={!editable || isSaving}
+                className={[
+                  "w-full rounded-xl border px-3 py-2 text-sm",
+                  editable
+                    ? "border-slate-200 bg-white"
+                    : "border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed",
+                ].join(" ")}
+                placeholder="예: 홍길동"
+              />
+            </div>
+
+            <div>
+              <div className="text-xs font-semibold text-slate-700 mb-1">완료 기한</div>
+              <input
+                type="date"
+                value={due}
+                onChange={(e) => setDue(e.target.value)}
+                disabled={!editable || isSaving}
+                className={[
+                  "w-full rounded-xl border px-3 py-2 text-sm",
+                  editable
+                    ? "border-slate-200 bg-white"
+                    : "border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed",
+                ].join(" ")}
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            <div>
+              <div className="text-xs font-semibold text-slate-700 mb-1">처리 계획</div>
+              <textarea
+                ref={planRef}
+                value={plan}
+                rows={3}
+                disabled={!editable || isSaving}
+                onChange={(e) => {
+                  setPlan(e.target.value);
+                  autoResize(e.target);
+                }}
+                className={[
+                  "w-full rounded-xl border px-3 py-2 text-sm resize-none overflow-hidden",
+                  editable
+                    ? "border-slate-200 bg-white"
+                    : "border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed",
+                ].join(" ")}
+                placeholder="예: 패치 적용, 접근 통제 강화, 모니터링 룰 추가..."
+              />
+            </div>
+
+            <div>
+              <div className="text-xs font-semibold text-slate-700 mb-1">
+                수용 사유 <span className="text-slate-400">(수용 선택 시 필수)</span>
+              </div>
+              <textarea
+                ref={acceptRef}
+                value={acceptReason}
+                rows={3}
+                disabled={!editable || isSaving || strategy !== "수용"}
+                onChange={(e) => {
+                  setAcceptReason(e.target.value);
+                  autoResize(e.target);
+                }}
+                className={[
+                  "w-full rounded-xl border px-3 py-2 text-sm resize-none overflow-hidden",
+                  !editable || strategy !== "수용"
+                    ? "border-slate-200 bg-slate-50 text-slate-400 cursor-not-allowed"
+                    : "border-slate-200 bg-white",
+                ].join(" ")}
+                placeholder={
+                  !editable
+                    ? "선행 단계 전체 완료 후 입력 가능"
+                    : strategy !== "수용"
+                      ? "수용 선택 시 입력 가능"
+                      : "예: 운영상 즉시 개선 어려움, 대체 통제 적용, 재평가 일정..."
+                }
+              />
+            </div>
+          </div>
         </div>
       </div>
 
@@ -541,18 +564,18 @@ export default function RiskTreatmentPanel({ checklistItems = [], onUpdated }) {
   }
 
   return (
-    <div className="h-[calc(100vh-160px)] flex flex-col gap-4 w-full max-w-none">
-      <div className={["sticky top-0 z-10", "-mx-6 px-6", "bg-slate-50/95 backdrop-blur", "pt-1"].join(" ")}>
-        <div className="space-y-4">
+    <div className="panel-shell flex flex-col gap-4 w-full max-w-none">
+      <div className="panel-sticky">
+        <div className="panel-header-stack">
           {!allPrerequisitesCompleted ? (
-            <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3">
-              <div className="text-sm font-semibold text-rose-700">단계 잠금</div>
-              <div className="mt-1 text-sm text-rose-700">{blockMessage}</div>
+            <div className="panel-banner rounded-2xl border border-rose-200 bg-rose-50">
+              <div className="panel-banner-title text-rose-700">단계 잠금</div>
+              <div className="panel-banner-body text-rose-700">{blockMessage}</div>
             </div>
           ) : (
-            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3">
-              <div className="text-sm font-semibold text-emerald-700">단계 활성화</div>
-              <div className="mt-1 text-sm text-emerald-700">
+            <div className="panel-banner rounded-2xl border border-emerald-200 bg-emerald-50">
+              <div className="panel-banner-title text-emerald-700">단계 활성화</div>
+              <div className="panel-banner-body text-emerald-700">
                 Status / 취약 식별 / 위험도 산정 단계가 전체 완료되어 위험 대응/조치 입력이 가능합니다.
               </div>
             </div>
@@ -560,10 +583,10 @@ export default function RiskTreatmentPanel({ checklistItems = [], onUpdated }) {
 
           <ProgressBar done={doneCount} total={targets.length} />
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-4">
+          <div className="panel-filter-card rounded-2xl border border-slate-200 bg-white p-4">
             <div className="flex items-start justify-between gap-3 flex-wrap">
               <div>
-                <div className="text-sm font-semibold text-slate-900">취약 항목 Treatment 작업대</div>
+                <div className="text-sm font-semibold text-slate-900">취약 항목 대응 계획 관리</div>
                 <div className="text-xs text-slate-500 mt-1">
                   필터/검색으로 우선순위를 정리하고, 처리 계획/담당/기한/상태를 기록하세요.
                 </div>

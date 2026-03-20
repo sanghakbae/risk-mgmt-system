@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import Button from "../ui/Button";
 import { fetchSecuritySettings, upsertSecuritySetting, writeAuditLog } from "../api/admin";
 
-const DEFAULT_ALLOWED_DOMAINS = ["muhayu.com", "gmail.com"];
+const DEFAULT_ALLOWED_DOMAINS = ["muhayu.com"];
 const DEFAULT_SESSION_TIMEOUT_MINUTES = 60;
 const MIN_SESSION_TIMEOUT_MINUTES = 1;
 const MAX_SESSION_TIMEOUT_MINUTES = 1440;
@@ -11,7 +11,7 @@ const MIN_LOG_RETENTION_DAYS = 1;
 const MAX_LOG_RETENTION_DAYS = 3650;
 
 function cardClass() {
-  return "rounded-2xl border border-slate-200 bg-white p-5";
+  return "rounded-2xl border border-slate-200 bg-white p-4";
 }
 
 function safeJsonStringify(value) {
@@ -150,8 +150,8 @@ export default function AdminSecurityPanel({ session, reloadKey, onChanged }) {
       return;
     }
 
-    if (domains.length > 2) {
-      alert("현재는 허용 도메인을 최대 2개까지 지원합니다.");
+    if (domains.length !== 1 || domains[0] !== "muhayu.com") {
+      alert("현재는 muhayu.com 도메인만 허용됩니다.");
       return;
     }
 
@@ -230,26 +230,26 @@ export default function AdminSecurityPanel({ session, reloadKey, onChanged }) {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <div className={cardClass()}>
-        <div className="text-lg font-bold text-slate-900">보안 설정</div>
-        <div className="text-sm text-slate-500 mt-1">
+        <div className="panel-banner-title text-slate-900">보안 설정</div>
+        <div className="panel-banner-body text-slate-500">
           관리자만 수정할 수 있습니다. 저장 시 감사 로그에 기록됩니다.
         </div>
         {error ? <div className="mt-3 text-sm text-rose-600">{error}</div> : null}
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
         <div className={cardClass()}>
           <div className="text-sm font-semibold text-slate-900">허용 이메일 도메인</div>
-          <div className="text-xs text-slate-500 mt-1">쉼표로 구분하여 최대 2개 입력</div>
+          <div className="text-xs text-slate-500 mt-1">기본 정책: muhayu.com만 허용</div>
 
           <div className="mt-4 flex gap-2">
             <input
               className="flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-slate-400"
               value={allowedDomainsText}
               onChange={(e) => setAllowedDomainsText(e.target.value)}
-              placeholder="muhayu.com, gmail.com"
+              placeholder="muhayu.com"
             />
             <Button
               onClick={handleSaveAllowedDomains}
@@ -260,7 +260,7 @@ export default function AdminSecurityPanel({ session, reloadKey, onChanged }) {
           </div>
 
           <div className="mt-2 text-xs text-slate-500">
-            예: <span className="font-medium">muhayu.com, gmail.com</span>
+            예: <span className="font-medium">muhayu.com</span>
           </div>
         </div>
 

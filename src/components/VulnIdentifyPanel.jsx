@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import Button from "../ui/Button";
 import { updateChecklistByCode } from "../api/checklist";
+import EvidenceModalTrigger from "./EvidenceModalTrigger";
+import TopProgressBar from "./TopProgressBar";
 
 const PAGE_SIZE = 20;
 const TYPE_ALL = "전체";
@@ -53,24 +55,13 @@ function buildOrderedUniqueOptions(rows, valueGetter) {
   return out;
 }
 
-function isImageUrl(url) {
-  const u = safeStr(url).trim();
-  if (!u) return false;
-
-  const clean = u.split("?")[0].split("#")[0].toLowerCase();
-  return (
-    clean.endsWith(".png") ||
-    clean.endsWith(".jpg") ||
-    clean.endsWith(".jpeg") ||
-    clean.endsWith(".gif") ||
-    clean.endsWith(".webp") ||
-    clean.endsWith(".bmp") ||
-    clean.endsWith(".svg")
-  );
-}
-
 function isStatusCompleted(row) {
   return safeStr(row?.status ?? row?.current_status ?? row?.state).trim() !== "";
+}
+
+function isVulnCompleted(row) {
+  const r = safeStr(row?.result ?? row?.vulnResult).trim();
+  return r === "양호" || r === "취약";
 }
 
 function getVulnBlockMessage(totalCount, doneCount) {
@@ -81,33 +72,18 @@ function EvidencePreview({ url }) {
   const u = safeStr(url).trim();
   if (!u) return null;
 
-  const img = isImageUrl(u);
-
   return (
-    <div className="mt-3">
+    <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
       <div className="text-sm font-bold text-slate-800">증적</div>
 
       <div className="mt-2">
-        {img ? (
-          <a href={u} target="_blank" rel="noopener noreferrer" className="inline-block">
-            <img
-              src={u}
-              alt="evidence"
-              className="h-20 w-32 rounded-xl border border-slate-200 object-cover hover:opacity-90"
-              loading="lazy"
-            />
-            <div className="mt-1 text-sm text-slate-500">클릭하면 원본 보기</div>
-          </a>
-        ) : (
-          <a
-            href={u}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-          >
-            업로드된 증적 보기
-          </a>
-        )}
+        <EvidenceModalTrigger
+          url={u}
+          imageClassName="h-20 w-32 rounded-xl border border-slate-200 object-cover hover:opacity-90"
+          linkClassName="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+          hint="클릭하면 팝업 보기"
+          fit="contain"
+        />
       </div>
     </div>
   );
@@ -158,14 +134,14 @@ function RowCard({ row, isSaving, onSave, editable, blockMessage }) {
   const evidenceUrl = safeStr(row.evidence_url).trim();
 
   return (
-    <div className="w-full max-w-none rounded-2xl border border-slate-200 bg-white p-5 space-y-4">
+    <div className="w-full max-w-none rounded-2xl border border-slate-200 bg-white p-5 space-y-3">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 w-full">
           <div className="text-sm text-slate-500">
             {normalizeType(row.type)} · {safeStr(row.area)} · {safeStr(row.domain)}
           </div>
 
-          <div className="text-sm font-semibold text-slate-900 whitespace-pre-wrap">
+          <div className="text-sm font-bold text-slate-900 whitespace-pre-wrap">
             [{safeStr(row.code)}] {safeStr(row.itemCode)}
           </div>
         </div>
@@ -175,65 +151,40 @@ function RowCard({ row, isSaving, onSave, editable, blockMessage }) {
 
       {guideText ? (
         <div className="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2">
-          <div className="text-sm font-bold text-sky-800 mb-1">가이드</div>
-          <div className="text-sm text-sky-800 whitespace-pre-wrap break-words">{guideText}</div>
+          <div className="mb-1 flex items-center gap-2">
+            <span className="inline-block h-3 w-3 rounded-sm border border-sky-400 bg-sky-300" />
+            <span className="text-sm font-bold text-sky-800">가이드</span>
+          </div>
+          <div className="text-sm font-bold text-sky-800 whitespace-pre-wrap break-words">{guideText}</div>
         </div>
       ) : null}
 
       {statusText ? (
         <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2">
-          <div className="text-sm font-bold text-emerald-800 mb-1">현황</div>
-          <div className="text-sm text-emerald-800 whitespace-pre-wrap break-words">{statusText}</div>
+          <div className="mb-1 flex items-center gap-2">
+            <span className="inline-block h-3 w-3 rounded-sm border border-emerald-400 bg-emerald-300" />
+            <span className="text-sm font-bold text-emerald-800">현황</span>
+          </div>
+          <div className="text-sm font-bold text-emerald-800 whitespace-pre-wrap break-words">{statusText}</div>
         </div>
       ) : (
         <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-          <div className="text-sm font-bold text-slate-700 mb-1">현황</div>
-          <div className="text-sm text-slate-500 whitespace-pre-wrap break-words">
+          <div className="mb-1 flex items-center gap-2">
+            <span className="inline-block h-3 w-3 rounded-sm border border-slate-400 bg-slate-300" />
+            <span className="text-sm font-bold text-slate-700">현황</span>
+          </div>
+          <div className="text-sm font-bold text-slate-500 whitespace-pre-wrap break-words">
             현황 미작성
           </div>
         </div>
       )}
 
-      {evidenceUrl ? <EvidencePreview url={evidenceUrl} /> : null}
-
-      <div className="flex items-center gap-3">
-        <div className="text-sm font-bold text-slate-800">결과</div>
-
-        <select
-          value={result}
-          onChange={(e) => setResult(e.target.value)}
-          disabled={!editable || isSaving}
-          className={[
-            "rounded-xl border px-3 py-2 text-sm outline-none",
-            editable
-              ? "border-slate-200 bg-white focus:ring-2 focus:ring-slate-200"
-              : "border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed",
-          ].join(" ")}
-        >
-          <option value="">선택</option>
-          <option value="양호">양호</option>
-          <option value="취약">취약</option>
-        </select>
-
-        {result === "양호" ? (
-          <div className="ml-auto">
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={!editable || isSaving}
-              className="h-[42px] px-5 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              저장
-            </button>
-          </div>
-        ) : null}
-      </div>
-
       {result === "취약" ? (
-        <div className="space-y-2">
-          <div className="text-sm font-bold text-slate-800">사유</div>
-
-          <div className="flex items-end gap-3">
+        <div>
+          <div className="flex items-stretch gap-2">
+            <div className="w-9 shrink-0 rounded-xl border border-rose-300 bg-rose-200 flex items-center justify-center text-sm font-bold text-rose-800 whitespace-pre-line">
+              {"사\n유"}
+            </div>
             <textarea
               value={detail}
               onChange={(e) => setDetail(e.target.value)}
@@ -242,24 +193,51 @@ function RowCard({ row, isSaving, onSave, editable, blockMessage }) {
                 editable ? "취약 판단 근거를 입력하세요" : "Status 전체 완료 후 입력 가능합니다."
               }
               className={[
-                "flex-1 min-h-[140px] rounded-xl px-3 py-2 text-sm outline-none",
+                "w-full max-w-[720px] min-h-[140px] rounded-xl px-3 py-2 text-sm outline-none",
                 editable
-                  ? "border border-rose-200 bg-rose-50 text-rose-700 focus:ring-2 focus:ring-rose-100"
+                  ? "border border-rose-300 bg-rose-100 text-rose-800 focus:ring-2 focus:ring-rose-200"
                   : "border border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed",
               ].join(" ")}
             />
+          </div>
+        </div>
+      ) : null}
 
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="min-w-0">
+          {evidenceUrl ? <EvidencePreview url={evidenceUrl} /> : null}
+        </div>
+
+        <div className="ml-auto flex items-center gap-3">
+          <div className="text-sm font-bold text-slate-800 whitespace-nowrap">결과 선택</div>
+          <select
+            value={result}
+            onChange={(e) => setResult(e.target.value)}
+            disabled={!editable || isSaving}
+            className={[
+              "rounded-xl border px-3 py-2 text-sm outline-none",
+              editable
+                ? "border-slate-200 bg-white focus:ring-2 focus:ring-slate-200"
+                : "border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed",
+            ].join(" ")}
+          >
+            <option value="">선택</option>
+            <option value="양호">양호</option>
+            <option value="취약">취약</option>
+          </select>
+
+          {result ? (
             <button
               type="button"
               onClick={handleSave}
               disabled={!editable || isSaving}
-              className="h-[42px] px-5 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="rounded-xl bg-slate-900 px-5 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
             >
               저장
             </button>
-          </div>
+          ) : null}
         </div>
-      ) : null}
+      </div>
     </div>
   );
 }
@@ -275,6 +253,7 @@ export default function VulnIdentifyPanel({ checklistItems = [], onUpdated }) {
   const [savingCode, setSavingCode] = useState(null);
 
   const totalCount = useMemo(() => (checklistItems || []).length, [checklistItems]);
+  const vulnDoneCount = useMemo(() => (checklistItems || []).filter(isVulnCompleted).length, [checklistItems]);
 
   const statusDoneCount = useMemo(() => {
     return (checklistItems || []).filter(isStatusCompleted).length;
@@ -418,23 +397,27 @@ export default function VulnIdentifyPanel({ checklistItems = [], onUpdated }) {
   }
 
   return (
-    <div className="h-[calc(100vh-160px)] flex flex-col gap-4 w-full max-w-none">
-      <div className={["sticky top-0 z-10", "-mx-6 px-6", "bg-slate-50/95 backdrop-blur", "pt-1"].join(" ")}>
+    <div className="panel-shell flex flex-col gap-4 w-full max-w-none">
+      <div className="panel-sticky">
         {!allStatusCompleted ? (
-          <div className="mb-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3">
-            <div className="text-sm font-semibold text-rose-700">단계 잠금</div>
-            <div className="mt-1 text-sm text-rose-700">{blockMessage}</div>
+          <div className="panel-banner mb-4 rounded-2xl border border-rose-200 bg-rose-50">
+            <div className="panel-banner-title text-rose-700">단계 잠금</div>
+            <div className="panel-banner-body text-rose-700">{blockMessage}</div>
           </div>
         ) : (
-          <div className="mb-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3">
-            <div className="text-sm font-semibold text-emerald-700">단계 활성화</div>
-            <div className="mt-1 text-sm text-emerald-700">
+          <div className="panel-banner mb-4 rounded-2xl border border-emerald-200 bg-emerald-50">
+            <div className="panel-banner-title text-emerald-700">단계 활성화</div>
+            <div className="panel-banner-body text-emerald-700">
               Status 단계가 전체 완료되어 취약 식별 입력이 가능합니다.
             </div>
           </div>
         )}
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-4">
+        <div className="mb-4">
+          <TopProgressBar title="취약 식별 진행률" done={vulnDoneCount} total={totalCount} />
+        </div>
+
+        <div className="panel-filter-card rounded-2xl border border-slate-200 bg-white p-4">
           <div className="flex items-center gap-2 flex-wrap">
             <select
               value={typeFilter}

@@ -1,6 +1,7 @@
 // src/components/ApprovePanel.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import Button from "../ui/Button";
+import EvidenceModalTrigger from "./EvidenceModalTrigger";
 
 function safeStr(v) {
   return v == null ? "" : String(v);
@@ -20,11 +21,6 @@ function badgeClassByResult(result) {
   return "bg-amber-50 text-amber-700 border-amber-200";
 }
 
-function isImageUrl(url) {
-  const u = safeStr(url).trim().toLowerCase();
-  return /\.(png|jpg|jpeg|gif|webp|bmp|svg)(\?.*)?$/.test(u);
-}
-
 function domainCounts(items) {
   const map = new Map();
   for (const x of items) {
@@ -40,6 +36,34 @@ function formatDateTimeNow() {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(
     d.getHours()
   )}:${pad(d.getMinutes())}`;
+}
+
+function buildSummaryChips(summary) {
+  const chips = [
+    {
+      key: "vuln",
+      label: "취약",
+      value: summary?.vuln ?? 0,
+      className: "bg-rose-50 text-rose-700 border-rose-200",
+    },
+    {
+      key: "ok",
+      label: "양호",
+      value: summary?.ok ?? 0,
+      className: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    },
+  ];
+
+  if ((summary?.empty ?? 0) > 0) {
+    chips.push({
+      key: "empty",
+      label: "미입력",
+      value: summary.empty,
+      className: "bg-amber-50 text-amber-700 border-amber-200",
+    });
+  }
+
+  return chips;
 }
 
 /* -----------------------------
@@ -85,30 +109,13 @@ function EvidenceBlock({ url }) {
       <div className="mt-2">
         {!u ? (
           <div className="text-sm text-slate-800 whitespace-pre-wrap break-words">—</div>
-        ) : isImageUrl(u) ? (
-          <a
-            href={u}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-block"
-            title="원본 새 탭으로 열기"
-          >
-            <img
-              src={u}
-              alt="evidence"
-              className="max-h-[640px] rounded-xl border border-slate-200 object-contain hover:opacity-90"
-              loading="eager"
-            />
-          </a>
         ) : (
-          <a
-            href={u}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-          >
-            업로드된 증적 보기
-          </a>
+          <EvidenceModalTrigger
+            url={u}
+            imageClassName="max-h-[640px] rounded-xl border border-slate-200 object-contain hover:opacity-90"
+            linkClassName="inline-flex items-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            fit="contain"
+          />
         )}
       </div>
     </div>
@@ -146,42 +153,44 @@ function SummaryImageBlock({ url }) {
   Report Content
 ------------------------------ */
 function ReportContent({ id, reportItems, summary, createdAt, summaryImageUrl }) {
-  const doms = useMemo(() => domainCounts(reportItems), [reportItems]);
+  const vulnerableItems = useMemo(
+    () => reportItems.filter((x) => safeStr(x.result).trim() === "취약"),
+    [reportItems]
+  );
+  const doms = useMemo(() => domainCounts(vulnerableItems), [vulnerableItems]);
+  const summaryChips = useMemo(() => buildSummaryChips(summary), [summary]);
 
   return (
     <div id={id} className="space-y-4">
       <div className="report-first-page space-y-4">
-        <div className="rounded-2xl border border-slate-200 bg-white p-5">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <div className="text-lg font-bold text-slate-900">체크리스트 기반 위험평가 결과보고서</div>
-              <div className="mt-1 text-xs text-slate-500">생성일시: {createdAt}</div>
-            </div>
-            <div className="text-xs text-slate-500 text-right">
-              대상: 선택된 항목
-              <br />총 {reportItems.length}건
-            </div>
+        <div className="relative px-1">
+          <div className="text-center text-2xl md:text-3xl font-extrabold text-slate-900">
+            체크리스트 기반 위험평가 결과보고서
           </div>
+          <div className="mt-2 text-xs text-slate-500 text-right">생성일시: {createdAt}</div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <div className="rounded-2xl border border-slate-200 bg-white p-5">
+        <div className="grid grid-cols-1 md:grid-cols-8 gap-3">
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 md:col-span-2">
             <div className="text-sm font-semibold text-slate-900">결과 요약</div>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <span className="px-3 py-1 rounded-full border text-xs font-semibold bg-rose-50 text-rose-700 border-rose-200">
-                취약: {summary.vuln}
-              </span>
-              <span className="px-3 py-1 rounded-full border text-xs font-semibold bg-emerald-50 text-emerald-700 border-emerald-200">
-                양호: {summary.ok}
-              </span>
-              <span className="px-3 py-1 rounded-full border text-xs font-semibold bg-amber-50 text-amber-700 border-amber-200">
-                미입력: {summary.empty}
-              </span>
+            <div
+              className="mt-3 grid gap-2"
+              style={{ gridTemplateColumns: `repeat(${Math.max(1, summaryChips.length)}, minmax(0, 1fr))` }}
+            >
+              {summaryChips.map((chip) => (
+                <span
+                  key={`report-summary-${chip.key}`}
+                  className={`w-full text-center px-2 py-2 rounded-lg border text-sm font-semibold ${chip.className}`}
+                >
+                  {chip.label}: {chip.value}
+                </span>
+              ))}
             </div>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-5">
-            <div className="text-sm font-semibold text-slate-900">도메인 분포</div>
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 md:col-span-6">
+            <div className="text-sm font-semibold text-slate-900">상세 취약점 도메인</div>
+            <div className="mt-1 text-xs text-slate-500">취약 항목 기준 도메인별 건수</div>
             <div className="mt-3 flex flex-wrap gap-2">
               {doms.length ? (
                 doms.slice(0, 20).map(([d, c]) => (
@@ -202,7 +211,7 @@ function ReportContent({ id, reportItems, summary, createdAt, summaryImageUrl })
         <SummaryImageBlock url={summaryImageUrl} />
       </div>
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-5">
+      <div className="p-1">
         <div className="text-sm font-semibold text-slate-900">상세 목록</div>
 
         <div className="mt-4 space-y-3">
@@ -212,6 +221,10 @@ function ReportContent({ id, reportItems, summary, createdAt, summaryImageUrl })
             const statusText = safeStr(row.status).trim();
             const evidenceUrl = safeStr(row.evidence_url).trim();
             const resultText = safeStr(row.result).trim() || "미입력";
+            const isOk = resultText === "양호";
+            const isVuln = resultText === "취약";
+            const guideText = safeStr(row.guide ?? row.Guide).trim();
+            const vulnDetailText = safeStr(row.result_detail).trim();
 
             return (
               <div
@@ -237,63 +250,106 @@ function ReportContent({ id, reportItems, summary, createdAt, summaryImageUrl })
                   </span>
                 </div>
 
-                {statusText ? (
-                  <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
-                    <div className="text-sm font-bold text-slate-900">현황</div>
-                    <div className="mt-1 text-sm text-slate-800 whitespace-pre-wrap break-words">
-                      {statusText}
+                {isOk ? (
+                  <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
+                      <div className="text-sm font-bold text-slate-900">현황</div>
+                      <div className="mt-1 text-sm text-slate-800 whitespace-pre-wrap break-words">
+                        {statusText || "—"}
+                      </div>
                     </div>
+                    <EvidenceBlock url={evidenceUrl} />
                   </div>
-                ) : null}
+                ) : isVuln ? (
+                  <>
+                    <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
+                        <div className="text-sm font-bold text-slate-900">현황</div>
+                        <div className="mt-1 text-sm text-slate-800 whitespace-pre-wrap break-words">
+                          {statusText || "—"}
+                        </div>
+                      </div>
 
-                <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div className="rounded-2xl border border-slate-200 bg-white px-3 py-2">
-                    <div className="text-sm font-bold text-slate-900">상세</div>
-                    <div className="mt-1 text-sm text-slate-800 whitespace-pre-wrap break-words">
-                      {safeStr(row.result_detail).trim() || "—"}
+                      <div className="rounded-2xl border border-sky-200 bg-sky-50 px-3 py-2">
+                        <div className="text-sm font-bold text-sky-800">가이드</div>
+                        <div className="mt-1 text-sm text-sky-800 whitespace-pre-wrap break-words">
+                          {guideText || "—"}
+                        </div>
+                      </div>
                     </div>
-                  </div>
 
-                  <div
-                    className={[
-                      "rounded-2xl px-3 py-2 border",
-                      resultText === "취약"
-                        ? "border-rose-200 bg-rose-50"
-                        : resultText === "양호"
-                          ? "border-emerald-200 bg-emerald-50"
-                          : "border-amber-200 bg-amber-50",
-                    ].join(" ")}
-                  >
-                    <div
-                      className={[
-                        "text-sm font-bold",
-                        resultText === "취약"
-                          ? "text-rose-700"
-                          : resultText === "양호"
-                            ? "text-emerald-700"
-                            : "text-amber-700",
-                      ].join(" ")}
-                    >
-                      사유
+                    <div className="mt-3 rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2">
+                      <div className="text-sm font-bold text-rose-700">취약점</div>
+                      <div className="mt-1 text-sm text-rose-700 whitespace-pre-wrap break-words">
+                        {vulnDetailText || "—"}
+                      </div>
                     </div>
-                    <div
-                      className={[
-                        "mt-1 text-sm whitespace-pre-wrap break-words",
-                        resultText === "취약"
-                          ? "text-rose-700"
-                          : resultText === "양호"
-                            ? "text-emerald-700"
-                            : "text-amber-700",
-                      ].join(" ")}
-                    >
-                      {safeStr(row.reason || row.result_detail || "").trim() || "—"}
-                    </div>
-                  </div>
-                </div>
 
-                <div className="mt-3">
-                  <EvidenceBlock url={evidenceUrl} />
-                </div>
+                    <div className="mt-3">
+                      <EvidenceBlock url={evidenceUrl} />
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    {statusText ? (
+                      <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
+                        <div className="text-sm font-bold text-slate-900">현황</div>
+                        <div className="mt-1 text-sm text-slate-800 whitespace-pre-wrap break-words">
+                          {statusText}
+                        </div>
+                      </div>
+                    ) : null}
+
+                    <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div className="rounded-2xl border border-slate-200 bg-white px-3 py-2">
+                        <div className="text-sm font-bold text-slate-900">상세</div>
+                        <div className="mt-1 text-sm text-slate-800 whitespace-pre-wrap break-words">
+                          {safeStr(row.result_detail).trim() || "—"}
+                        </div>
+                      </div>
+
+                      <div
+                        className={[
+                          "rounded-2xl px-3 py-2 border",
+                          resultText === "취약"
+                            ? "border-rose-200 bg-rose-50"
+                            : resultText === "양호"
+                              ? "border-emerald-200 bg-emerald-50"
+                              : "border-amber-200 bg-amber-50",
+                        ].join(" ")}
+                      >
+                        <div
+                          className={[
+                            "text-sm font-bold",
+                            resultText === "취약"
+                              ? "text-rose-700"
+                              : resultText === "양호"
+                                ? "text-emerald-700"
+                                : "text-amber-700",
+                          ].join(" ")}
+                        >
+                          사유
+                        </div>
+                        <div
+                          className={[
+                            "mt-1 text-sm whitespace-pre-wrap break-words",
+                            resultText === "취약"
+                              ? "text-rose-700"
+                              : resultText === "양호"
+                                ? "text-emerald-700"
+                                : "text-amber-700",
+                          ].join(" ")}
+                        >
+                          {safeStr(row.reason || row.result_detail || "").trim() || "—"}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-3">
+                      <EvidenceBlock url={evidenceUrl} />
+                    </div>
+                  </>
+                )}
               </div>
             );
           })}
@@ -301,6 +357,24 @@ function ReportContent({ id, reportItems, summary, createdAt, summaryImageUrl })
           {reportItems.length === 0 ? (
             <div className="py-10 text-center text-sm text-slate-500">선택된 항목이 없습니다.</div>
           ) : null}
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-slate-200 bg-white p-5">
+        <div className="text-sm font-semibold text-slate-900">승인자 서명</div>
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
+            <div className="text-xs text-slate-500">승인 일자</div>
+            <div className="mt-3 h-7 border-b border-slate-300" />
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
+            <div className="text-xs text-slate-500">승인자</div>
+            <div className="mt-3 h-7 border-b border-slate-300" />
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
+            <div className="text-xs text-slate-500">서명</div>
+            <div className="mt-3 h-7 border-b border-slate-300" />
+          </div>
         </div>
       </div>
     </div>
@@ -318,6 +392,7 @@ export default function ApprovePanel({
 }) {
   const [openReport, setOpenReport] = useState(false);
   const [selectedCodes, setSelectedCodes] = useState([]);
+  const [selectionMode, setSelectionMode] = useState("all");
   const createdAt = useMemo(() => formatDateTimeNow(), []);
   const screenReportRef = useRef(null);
 
@@ -339,6 +414,16 @@ export default function ApprovePanel({
   const reportItems = useMemo(() => {
     return Array.isArray(checklistItems) ? checklistItems : [];
   }, [checklistItems]);
+
+  const vulnerableReportItems = useMemo(
+    () => reportItems.filter((x) => safeStr(x.result).trim() === "취약"),
+    [reportItems]
+  );
+
+  const vulnerableDomains = useMemo(
+    () => domainCounts(vulnerableReportItems),
+    [vulnerableReportItems]
+  );
 
   useEffect(() => {
     setSelectedCodes(reportItems.map((x) => safeStr(x.code)));
@@ -368,6 +453,7 @@ export default function ApprovePanel({
       total: selectedReportItems.length,
     };
   }, [selectedReportItems]);
+  const summaryChips = useMemo(() => buildSummaryChips(summary), [summary]);
 
   useEffect(() => {
     const after = () => {
@@ -426,8 +512,21 @@ export default function ApprovePanel({
     setSelectedCodes(reportItems.map((x) => safeStr(x.code)));
   }
 
-  function handleClearAll() {
-    setSelectedCodes([]);
+  function handleSelectVulnerable() {
+    setSelectedCodes(
+      reportItems
+        .filter((x) => safeStr(x.result).trim() === "취약")
+        .map((x) => safeStr(x.code))
+    );
+  }
+
+  function handleChangeSelectionMode(mode) {
+    setSelectionMode(mode);
+    if (mode === "vuln") {
+      handleSelectVulnerable();
+      return;
+    }
+    handleSelectAll();
   }
 
   async function handlePrintReport() {
@@ -577,63 +676,84 @@ export default function ApprovePanel({
         }
       `}</style>
 
-      <div className="sticky top-0 z-10 -mx-6 px-6 bg-slate-50/95 backdrop-blur pt-1">
-        <div className="space-y-4">
-          <div className="rounded-2xl border border-slate-200 bg-white p-4">
+      <div className="panel-sticky">
+        <div className="panel-header-stack">
+          <div className="panel-filter-card rounded-2xl border border-slate-200 bg-white p-4">
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <div className="min-w-0">
-                <div className="text-sm font-semibold text-slate-900">승인 및 보고</div>
-                <div className="text-sm text-slate-600 mt-1">
+                <div className="panel-banner-title text-slate-900">승인 및 보고</div>
+                <div className="panel-banner-body text-slate-600">
                   리포트 선택 항목만: {selectedReportItems.length} / 전체: {summary.total}
                 </div>
               </div>
 
               <div className="flex items-center gap-2 flex-wrap">
-                <Button variant="outline" onClick={handleSelectAll}>
-                  전체 선택
-                </Button>
-                <Button variant="outline" onClick={handleClearAll}>
-                  선택 해제
-                </Button>
-                <Button variant="outline" onClick={handleOpenReport}>
+                <select
+                  value={selectionMode}
+                  onChange={(e) => handleChangeSelectionMode(e.target.value)}
+                  className="h-8 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 outline-none focus:ring-2 focus:ring-slate-200"
+                >
+                  <option value="all">전체 선택</option>
+                  <option value="vuln">취약점 선택</option>
+                </select>
+                <Button variant="outline" onClick={handleOpenReport} className="h-8 px-3 text-xs">
                   보고서 보기
                 </Button>
-                <Button variant="outline" onClick={handlePrintReport}>
+                <Button
+                  variant="outline"
+                  onClick={handlePrintReport}
+                  className="h-8 px-3 text-xs bg-black text-white border-black hover:bg-slate-900 hover:border-slate-900"
+                >
                   PDF로 저장(인쇄)
                 </Button>
-                <Button onClick={handleApproveAll}>전체 승인 처리</Button>
               </div>
             </div>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-4">
-            <div className="flex items-center justify-between gap-3 flex-wrap">
-              <div className="text-sm font-semibold text-slate-900">결과 요약</div>
-              <div className="text-sm text-slate-600">총 {summary.total}건</div>
-            </div>
-
-            <div className="mt-3 flex flex-wrap gap-2">
-              <span className="px-3 py-1 rounded-full border text-sm font-semibold bg-rose-50 text-rose-700 border-rose-200">
-                취약 : {summary.vuln}
-              </span>
-              <span className="px-3 py-1 rounded-full border text-sm font-semibold bg-emerald-50 text-emerald-700 border-emerald-200">
-                양호 : {summary.ok}
-              </span>
-              <span className="px-3 py-1 rounded-full border text-sm font-semibold bg-amber-50 text-amber-700 border-amber-200">
-                미입력 : {summary.empty}
-              </span>
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-slate-200 bg-white p-4">
-            <div className="flex items-end justify-between gap-3 flex-wrap">
-              <div>
-                <div className="text-sm font-semibold text-slate-900">상세 목록</div>
-                <div className="text-sm text-slate-600 mt-1">
-                  전체 항목이 표시되며, 체크한 항목만 보고서/다운로드에 포함됩니다.
-                </div>
+          <div className="grid grid-cols-1 xl:grid-cols-5 gap-4">
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 xl:col-span-2">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div className="text-sm font-semibold text-slate-900">결과 요약</div>
+                <div className="text-sm text-slate-600">총 {summary.total}건</div>
               </div>
-              <div className="text-sm text-slate-600">총 {reportItems.length}건</div>
+
+              <div
+                className="mt-3 grid gap-2"
+                style={{ gridTemplateColumns: `repeat(${Math.max(1, summaryChips.length)}, minmax(0, 1fr))` }}
+              >
+                {summaryChips.map((chip) => (
+                  <span
+                    key={`main-summary-${chip.key}`}
+                    className={`w-full text-center px-2 py-2 rounded-lg border text-sm font-semibold ${chip.className}`}
+                  >
+                    {chip.label}: {chip.value}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 xl:col-span-3">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div className="text-sm font-semibold text-slate-900">상세 취약점 도메인</div>
+                <div className="text-sm text-slate-600">취약 {vulnerableReportItems.length}건</div>
+              </div>
+
+              <div className="mt-1 text-xs text-slate-500">취약 항목 기준 도메인별 건수</div>
+
+              <div className="mt-3 flex flex-wrap gap-2">
+                {vulnerableDomains.length ? (
+                  vulnerableDomains.slice(0, 20).map(([d, c]) => (
+                    <span
+                      key={`main-vuln-domain-${d}`}
+                      className="px-3 py-1 rounded-full border text-xs font-semibold bg-white text-slate-700 border-slate-200"
+                    >
+                      {d} <span className="text-slate-500">{c}</span>
+                    </span>
+                  ))
+                ) : (
+                  <div className="text-xs text-slate-500">표시할 취약 도메인이 없습니다.</div>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -649,6 +769,10 @@ export default function ApprovePanel({
           const evidenceUrl = safeStr(row.evidence_url).trim();
           const checked = selectedCodes.includes(code);
           const resultText = safeStr(row.result).trim() || "미입력";
+          const isOk = resultText === "양호";
+          const isVuln = resultText === "취약";
+          const guideText = safeStr(row.guide ?? row.Guide).trim();
+          const vulnDetailText = safeStr(row.result_detail).trim();
 
           return (
             <div key={code} className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
@@ -683,61 +807,102 @@ export default function ApprovePanel({
                 </span>
               </div>
 
-              {statusText ? (
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
-                  <div className="text-sm font-bold text-slate-900">현황</div>
-                  <div className="mt-1 text-sm text-slate-800 whitespace-pre-wrap break-words">
-                    {statusText}
+              {isOk ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
+                    <div className="text-sm font-bold text-slate-900">현황</div>
+                    <div className="mt-1 text-sm text-slate-800 whitespace-pre-wrap break-words">
+                      {statusText || "—"}
+                    </div>
                   </div>
+                  <EvidenceBlock url={evidenceUrl} />
                 </div>
-              ) : null}
+              ) : isVuln ? (
+                <>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
+                      <div className="text-sm font-bold text-slate-900">현황</div>
+                      <div className="mt-1 text-sm text-slate-800 whitespace-pre-wrap break-words">
+                        {statusText || "—"}
+                      </div>
+                    </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div className="rounded-2xl border border-slate-200 bg-white px-3 py-2">
-                  <div className="text-sm font-bold text-slate-900">상세</div>
-                  <div className="mt-1 text-sm text-slate-800 whitespace-pre-wrap break-words">
-                    {safeStr(row.result_detail).trim() || "—"}
+                    <div className="rounded-2xl border border-sky-200 bg-sky-50 px-3 py-2">
+                      <div className="text-sm font-bold text-sky-800">가이드</div>
+                      <div className="mt-1 text-sm text-sky-800 whitespace-pre-wrap break-words">
+                        {guideText || "—"}
+                      </div>
+                    </div>
                   </div>
-                </div>
 
-                <div
-                  className={[
-                    "rounded-2xl px-3 py-2 border",
-                    resultText === "취약"
-                      ? "border-rose-200 bg-rose-50"
-                      : resultText === "양호"
-                        ? "border-emerald-200 bg-emerald-50"
-                        : "border-amber-200 bg-amber-50",
-                  ].join(" ")}
-                >
-                  <div
-                    className={[
-                      "text-sm font-bold",
-                      resultText === "취약"
-                        ? "text-rose-700"
-                        : resultText === "양호"
-                          ? "text-emerald-700"
-                          : "text-amber-700",
-                    ].join(" ")}
-                  >
-                    사유
+                  <div className="rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2">
+                    <div className="text-sm font-bold text-rose-700">취약점</div>
+                    <div className="mt-1 text-sm text-rose-700 whitespace-pre-wrap break-words">
+                      {vulnDetailText || "—"}
+                    </div>
                   </div>
-                  <div
-                    className={[
-                      "mt-1 text-sm whitespace-pre-wrap break-words",
-                      resultText === "취약"
-                        ? "text-rose-700"
-                        : resultText === "양호"
-                          ? "text-emerald-700"
-                          : "text-amber-700",
-                    ].join(" ")}
-                  >
-                    {safeStr(row.reason || row.result_detail || "").trim() || "—"}
-                  </div>
-                </div>
-              </div>
 
-              <EvidenceBlock url={evidenceUrl} />
+                  <EvidenceBlock url={evidenceUrl} />
+                </>
+              ) : (
+                <>
+                  {statusText ? (
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
+                      <div className="text-sm font-bold text-slate-900">현황</div>
+                      <div className="mt-1 text-sm text-slate-800 whitespace-pre-wrap break-words">
+                        {statusText}
+                      </div>
+                    </div>
+                  ) : null}
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="rounded-2xl border border-slate-200 bg-white px-3 py-2">
+                      <div className="text-sm font-bold text-slate-900">상세</div>
+                      <div className="mt-1 text-sm text-slate-800 whitespace-pre-wrap break-words">
+                        {safeStr(row.result_detail).trim() || "—"}
+                      </div>
+                    </div>
+
+                    <div
+                      className={[
+                        "rounded-2xl px-3 py-2 border",
+                        resultText === "취약"
+                          ? "border-rose-200 bg-rose-50"
+                          : resultText === "양호"
+                            ? "border-emerald-200 bg-emerald-50"
+                            : "border-amber-200 bg-amber-50",
+                      ].join(" ")}
+                    >
+                      <div
+                        className={[
+                          "text-sm font-bold",
+                          resultText === "취약"
+                            ? "text-rose-700"
+                            : resultText === "양호"
+                              ? "text-emerald-700"
+                              : "text-amber-700",
+                        ].join(" ")}
+                      >
+                        사유
+                      </div>
+                      <div
+                        className={[
+                          "mt-1 text-sm whitespace-pre-wrap break-words",
+                          resultText === "취약"
+                            ? "text-rose-700"
+                            : resultText === "양호"
+                              ? "text-emerald-700"
+                              : "text-amber-700",
+                        ].join(" ")}
+                      >
+                        {safeStr(row.reason || row.result_detail || "").trim() || "—"}
+                      </div>
+                    </div>
+                  </div>
+
+                  <EvidenceBlock url={evidenceUrl} />
+                </>
+              )}
             </div>
           );
         })}
@@ -750,7 +915,15 @@ export default function ApprovePanel({
           open={openReport}
           title="체크리스트 기반 위험평가 결과보고서"
           onClose={() => setOpenReport(false)}
-          footer={<Button onClick={handlePrintReport}>PDF로 저장(인쇄)</Button>}
+          footer={
+            <Button
+              variant="outline"
+              onClick={handlePrintReport}
+              className="bg-black text-white border-black hover:bg-slate-900 hover:border-slate-900"
+            >
+              PDF로 저장(인쇄)
+            </Button>
+          }
         >
           <div ref={screenReportRef}>
             <ReportContent

@@ -3,6 +3,7 @@ import { Download, Upload } from "lucide-react";
 import Papa from "papaparse";
 import Button from "../ui/Button";
 import { supabase } from "../lib/supabaseClient";
+import TopProgressBar from "./TopProgressBar";
 
 const PAGE_SIZE = 20;
 
@@ -21,18 +22,6 @@ function normalizeType(v) {
 
 function clamp(n, min, max) {
   return Math.max(min, Math.min(max, n));
-}
-
-function sanitizePathSegment(s) {
-  return safeStr(s)
-    .trim()
-    .replace(/\./g, "_")
-    .replace(/[^a-zA-Z0-9_-]/g, "_");
-}
-
-function sanitizeFileName(name) {
-  const s = safeStr(name).trim();
-  return s.replace(/[^a-zA-Z0-9._-]/g, "_");
 }
 
 function compareCode(a, b) {
@@ -61,6 +50,16 @@ function buildOrderedUniqueOptions(rows, valueGetter) {
   }
 
   return out;
+}
+
+function isChecklistDefined(row) {
+  return (
+    safeStr(row?.type).trim() !== "" &&
+    safeStr(row?.area).trim() !== "" &&
+    safeStr(row?.domain).trim() !== "" &&
+    safeStr(row?.code).trim() !== "" &&
+    safeStr(row?.itemCode ?? row?.itemcode).trim() !== ""
+  );
 }
 
 export default function ChecklistPanel({ checklistItems = [] }) {
@@ -181,6 +180,8 @@ export default function ChecklistPanel({ checklistItems = [] }) {
     const start = (pageSafe - 1) * PAGE_SIZE;
     return filteredRows.slice(start, start + PAGE_SIZE);
   }, [filteredRows, pageSafe]);
+
+  const checklistDoneCount = useMemo(() => rows.filter(isChecklistDefined).length, [rows]);
 
   // ✅ 페이지 번호 최대 10개(슬라이딩)
   const maxPageButtons = 10;
@@ -331,9 +332,6 @@ export default function ChecklistPanel({ checklistItems = [] }) {
         if (!r.type) r.type = "ISMS";
       }
 
-      const _safePath = `${sanitizePathSegment("checklist")}/${Date.now()}_${sanitizeFileName(file.name)}`;
-      void _safePath;
-
       await upsertChecklist(rowsClean);
       alert(`Import 완료: ${rowsClean.length}건 처리`);
     } catch (err) {
@@ -345,31 +343,12 @@ export default function ChecklistPanel({ checklistItems = [] }) {
   }
 
   return (
-    <div className="h-[calc(100vh-160px)] flex flex-col gap-4 w-full max-w-none">
-      <div className={["sticky top-0 z-10", "-mx-6 px-6", "bg-slate-50/95 backdrop-blur", "pt-1"].join(" ")}>
-        <div className="space-y-4">
-          <div className="flex items-center justify-between gap-3 flex-wrap">
-            <div className="text-sm text-slate-600">통제 항목 관리 (필터/검색 실시간 + CSV Export/Import)</div>
+    <div className="panel-shell flex flex-col gap-4 w-full max-w-none">
+      <div className="panel-sticky">
+        <div className="panel-header-stack">
+          <TopProgressBar title="Checklist 작성 진행률" done={checklistDoneCount} total={rows.length} />
 
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={importing}
-                iconLeft={<Upload className="w-4 h-4" />}
-              >
-                {importing ? "Importing..." : "Import"}
-              </Button>
-
-              <input ref={fileInputRef} type="file" accept=".csv,text/csv" className="hidden" onChange={onImportFile} />
-
-              <Button variant="outline" onClick={exportCsv} iconLeft={<Download className="w-4 h-4" />}>
-                CSV Export
-              </Button>
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-slate-200 bg-white p-4">
+          <div className="panel-filter-card rounded-lg border border-slate-200 bg-white p-3">
             <div className="flex items-center gap-2 flex-wrap">
               <select
                 value={typeFilter}
@@ -378,7 +357,7 @@ export default function ChecklistPanel({ checklistItems = [] }) {
                   setAreaFilter("전체");
                   setDomainFilter("전체");
                 }}
-                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
+                className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
               >
                 {typeOptions.map((t) => (
                   <option key={t} value={t}>
@@ -393,7 +372,7 @@ export default function ChecklistPanel({ checklistItems = [] }) {
                   setAreaFilter(e.target.value);
                   setDomainFilter("전체");
                 }}
-                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
+                className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
               >
                 {areaOptions.map((a) => (
                   <option key={a} value={a}>
@@ -405,7 +384,7 @@ export default function ChecklistPanel({ checklistItems = [] }) {
               <select
                 value={domainFilter}
                 onChange={(e) => setDomainFilter(e.target.value)}
-                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
+                className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
               >
                 {domainOptions.map((d) => (
                   <option key={d} value={d}>
@@ -417,14 +396,32 @@ export default function ChecklistPanel({ checklistItems = [] }) {
               <input
                 value={keyword}
                 onChange={(e) => setKeyword(e.target.value)}
-                className="min-w-[260px] flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
+                className="min-w-[220px] flex-1 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
                 placeholder="검색(코드/항목/가이드/현황/도메인/영역 등)"
               />
 
-              <div className="text-sm text-slate-600 ml-auto">
+              <div className="text-xs text-slate-600 ml-auto">
                 표시 {filteredRows.length}건 · {pageSafe}/{totalPages} 페이지
               </div>
             </div>
+          </div>
+
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={importing}
+              iconLeft={<Upload className="w-4 h-4" />}
+              className="h-9 rounded-md px-3"
+            >
+              {importing ? "Importing..." : "Import"}
+            </Button>
+
+            <input ref={fileInputRef} type="file" accept=".csv,text/csv" className="hidden" onChange={onImportFile} />
+
+            <Button variant="outline" onClick={exportCsv} iconLeft={<Download className="w-4 h-4" />} className="h-9 rounded-md px-3">
+              CSV Export
+            </Button>
           </div>
         </div>
 

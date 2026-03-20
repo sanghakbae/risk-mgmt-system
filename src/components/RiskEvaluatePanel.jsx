@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import Button from "../ui/Button";
 import { updateChecklistByCode } from "../api/checklist";
+import EvidenceModalTrigger from "./EvidenceModalTrigger";
+import TopProgressBar from "./TopProgressBar";
 
 const PAGE_SIZE = 5;
 
@@ -54,18 +56,23 @@ function buildOrderedUniqueOptions(rows, valueGetter) {
   return out;
 }
 
-function isImageUrl(url) {
-  const u = safeStr(url).trim().toLowerCase();
-  return /\.(png|jpg|jpeg|gif|webp|bmp|svg)(\?.*)?$/.test(u);
-}
-
 function isVulnIdentified(row) {
   const r = safeStr(row?.result ?? row?.vulnResult).trim();
   return r === "양호" || r === "취약";
 }
 
+function isRiskEvaluated(row) {
+  const l = safeStr(row?.likelihood).trim();
+  const i = safeStr(row?.impact).trim();
+  return l !== "" && i !== "";
+}
+
+function isVulnerable(row) {
+  return safeStr(row?.result ?? row?.vulnResult).trim() === "취약";
+}
+
 function getRiskBlockMessage(totalCount, doneCount) {
-  return `취약 식별 단계가 전체 완료되어야 위험도 산정을 수정할 수 있습니다. (${doneCount}/${totalCount} 완료)`;
+  return "취약 식별 단계 전체 완료 후 위험도 산정을 수정할 수 있습니다.";
 }
 
 // 회사 정책 Risk Matrix
@@ -105,35 +112,14 @@ function EvidencePreviewInline({ url }) {
   const u = safeStr(url).trim();
   if (!u) return null;
 
-  const img = isImageUrl(u);
-
   return (
     <div className="flex items-center gap-2">
-      {img ? (
-        <a
-          href={u}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="block"
-          title="원본 새 탭으로 열기"
-        >
-          <img
-            src={u}
-            alt="evidence"
-            className="h-12 w-12 rounded-lg border border-slate-200 object-cover hover:opacity-90"
-            loading="lazy"
-          />
-        </a>
-      ) : (
-        <a
-          href={u}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-sm text-blue-600 underline"
-        >
-          업로드된 증적 보기
-        </a>
-      )}
+      <EvidenceModalTrigger
+        url={u}
+        imageClassName="h-12 w-12 rounded-lg border border-slate-200 object-cover hover:opacity-90"
+        linkClassName="text-sm text-blue-600 underline"
+        fit="contain"
+      />
     </div>
   );
 }
@@ -145,6 +131,7 @@ function RiskCard({ row, draft, onChangeDraft, onSave, saving, editable, blockMe
   const domain = safeStr(row.domain);
   const title = safeStr(row.itemCode ?? row.itemcode);
 
+  const guideText = safeStr(row.guide ?? row.Guide).trim();
   const statusText = safeStr(row.status ?? row.current_status ?? row.state).trim();
   const reasonText = safeStr(row.reason ?? row.result_detail).trim();
   const evidenceUrl = safeStr(row.evidence_url).trim();
@@ -178,9 +165,22 @@ function RiskCard({ row, draft, onChangeDraft, onSave, saving, editable, blockMe
         </div>
       </div>
 
+      {guideText ? (
+        <div className="rounded-2xl border border-sky-200 bg-sky-50 px-3 py-2">
+          <div className="mb-1 flex items-center gap-2">
+            <span className="inline-block h-3 w-3 rounded-sm border border-sky-400 bg-sky-300" />
+            <span className="text-sm font-semibold text-sky-800">가이드</span>
+          </div>
+          <div className="text-sm text-sky-800 whitespace-pre-wrap break-words">{guideText}</div>
+        </div>
+      ) : null}
+
       {statusText ? (
         <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
-          <div className="text-sm font-semibold text-slate-900">현황</div>
+          <div className="mb-1 flex items-center gap-2">
+            <span className="inline-block h-3 w-3 rounded-sm border border-slate-400 bg-slate-300" />
+            <span className="text-sm font-semibold text-slate-900">현황</span>
+          </div>
           <div className="mt-1 text-sm text-slate-800 whitespace-pre-wrap break-words">
             {statusText}
           </div>
@@ -193,7 +193,10 @@ function RiskCard({ row, draft, onChangeDraft, onSave, saving, editable, blockMe
         </div>
       ) : evidenceUrl ? (
         <div className="rounded-2xl border border-slate-200 bg-white px-3 py-2">
-          <div className="text-sm font-semibold text-slate-900">증적</div>
+          <div className="mb-1 flex items-center gap-2">
+            <span className="inline-block h-3 w-3 rounded-sm border border-slate-400 bg-slate-300" />
+            <span className="text-sm font-semibold text-slate-900">증적</span>
+          </div>
           <div className="mt-2">
             <EvidencePreviewInline url={evidenceUrl} />
           </div>
@@ -202,7 +205,10 @@ function RiskCard({ row, draft, onChangeDraft, onSave, saving, editable, blockMe
 
       {reasonText ? (
         <div className="rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2">
-          <div className="text-sm font-semibold text-rose-700">사유</div>
+          <div className="mb-1 flex items-center gap-2">
+            <span className="inline-block h-3 w-3 rounded-sm border border-rose-400 bg-rose-300" />
+            <span className="text-sm font-semibold text-rose-700">사유</span>
+          </div>
           <div className="mt-1 text-sm text-rose-700 whitespace-pre-wrap break-words">
             {reasonText}
           </div>
@@ -251,9 +257,7 @@ function RiskCard({ row, draft, onChangeDraft, onSave, saving, editable, blockMe
         </div>
 
         <div className="flex items-center gap-3 ml-auto">
-          <div className={`text-sm ${editable ? "text-slate-500" : "text-rose-600"}`}>
-            {editable ? "* 두 값 모두 선택 후 저장하세요." : blockMessage}
-          </div>
+          {editable ? <div className="text-sm text-slate-500">* 두 값 모두 선택 후 저장하세요.</div> : null}
 
           <Button
             onClick={() => onSave(row, draft)}
@@ -288,6 +292,11 @@ export default function RiskEvaluatePanel({ checklistItems = [], onUpdated }) {
   const [savingCode, setSavingCode] = useState(null);
 
   const totalCount = useMemo(() => rows.length, [rows]);
+  const riskTargetCount = useMemo(() => rows.filter(isVulnerable).length, [rows]);
+  const riskDoneCount = useMemo(
+    () => rows.filter((x) => isVulnerable(x) && isRiskEvaluated(x)).length,
+    [rows]
+  );
 
   const vulnDoneCount = useMemo(() => {
     return rows.filter(isVulnIdentified).length;
@@ -473,23 +482,31 @@ export default function RiskEvaluatePanel({ checklistItems = [], onUpdated }) {
   }
 
   return (
-    <div className="h-[calc(100vh-180px)] flex flex-col gap-4 w-full max-w-none">
-      <div className="sticky top-0 z-10 -mx-6 px-6 bg-slate-50/95 backdrop-blur pt-1">
+    <div className="panel-shell flex flex-col gap-4 w-full max-w-none">
+      <div className="panel-sticky">
         {!allVulnCompleted ? (
-          <div className="mb-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3">
-            <div className="text-sm font-semibold text-rose-700">단계 잠금</div>
-            <div className="mt-1 text-sm text-rose-700">{blockMessage}</div>
+          <div className="panel-banner mb-4 rounded-2xl border border-rose-200 bg-rose-50">
+            <div className="panel-banner-title text-rose-700">단계 잠금</div>
+            <div className="panel-banner-body text-rose-700">{blockMessage}</div>
           </div>
         ) : (
-          <div className="mb-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3">
-            <div className="text-sm font-semibold text-emerald-700">단계 활성화</div>
-            <div className="mt-1 text-sm text-emerald-700">
+          <div className="panel-banner mb-4 rounded-2xl border border-emerald-200 bg-emerald-50">
+            <div className="panel-banner-title text-emerald-700">단계 활성화</div>
+            <div className="panel-banner-body text-emerald-700">
               취약 식별 단계가 전체 완료되어 위험도 산정 입력이 가능합니다.
             </div>
           </div>
         )}
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-4">
+        <div className="mb-4">
+          <TopProgressBar
+            title="위험도 산정 진행률"
+            done={allVulnCompleted ? riskDoneCount : 0}
+            total={riskTargetCount}
+          />
+        </div>
+
+        <div className="panel-filter-card rounded-2xl border border-slate-200 bg-white p-4">
           <div className="flex items-center gap-2 flex-wrap">
             <select
               value={typeFilter}

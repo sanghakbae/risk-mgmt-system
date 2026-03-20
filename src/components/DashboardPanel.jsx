@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 
 function toText(v) {
   return v == null ? "" : String(v);
@@ -80,7 +80,7 @@ function ProgressPanel({ done, total, pctValue }) {
     <div className="rounded-2xl bg-white border border-slate-200 shadow-sm px-5 py-5">
       <div className="flex items-end justify-between gap-3 flex-wrap">
         <div>
-          <div className="text-sm font-semibold text-slate-900">평가 진행률</div>
+          <div className="text-base font-bold text-slate-900">평가 진행률</div>
         </div>
         <div className="text-sm font-medium text-slate-600 tabular-nums">{pctValue}%</div>
       </div>
@@ -102,12 +102,12 @@ function ProgressPanel({ done, total, pctValue }) {
 
 function getHeatTone(r) {
   if (!r.total || r.empty === r.total) {
-    return "bg-slate-100 border-slate-200 text-slate-600";
+    return "border-slate-300 bg-gradient-to-br from-slate-50 via-slate-100 to-slate-200 text-slate-700 shadow-[inset_1px_1px_0_rgba(255,255,255,0.9),inset_-1px_-1px_0_rgba(148,163,184,0.2),0_3px_8px_rgba(15,23,42,0.08)]";
   }
   if (r.rate > 0) {
-    return "bg-rose-100 border-rose-200 text-rose-700";
+    return "border-rose-300 bg-gradient-to-br from-rose-50 via-rose-100 to-rose-200 text-rose-800 shadow-[inset_1px_1px_0_rgba(255,255,255,0.85),inset_-1px_-1px_0_rgba(244,63,94,0.14),0_3px_8px_rgba(244,63,94,0.16)]";
   }
-  return "bg-emerald-100 border-emerald-200 text-emerald-700";
+  return "border-emerald-300 bg-gradient-to-br from-emerald-50 via-emerald-100 to-emerald-200 text-emerald-800 shadow-[inset_1px_1px_0_rgba(255,255,255,0.88),inset_-1px_-1px_0_rgba(16,185,129,0.14),0_3px_8px_rgba(16,185,129,0.16)]";
 }
 
 function DomainHeatmap({ rows }) {
@@ -115,7 +115,7 @@ function DomainHeatmap({ rows }) {
     <div className="rounded-2xl bg-white ring-1 ring-slate-200/70 shadow-sm">
       <div className="px-5 pt-5 pb-4 flex items-end justify-between gap-3 flex-wrap">
         <div>
-          <div className="text-sm font-semibold text-slate-900">도메인 위험 히트맵</div>
+          <div className="text-base font-bold text-slate-900">도메인 위험 히트맵</div>
           <div className="text-xs text-slate-500 mt-1">
             도메인별 취약 여부와 평가 상태를 한눈에 확인합니다.
           </div>
@@ -124,20 +124,20 @@ function DomainHeatmap({ rows }) {
       </div>
 
       <div className="px-5 pb-5">
-        <div className="grid grid-cols-4 sm:grid-cols-6 xl:grid-cols-8 gap-2">
+        <div className="grid grid-cols-6 sm:grid-cols-7 lg:grid-cols-9 xl:grid-cols-12 gap-1.5">
           {rows.map((r) => (
             <div
               key={r.domain}
               title={`${r.domain} | 전체 ${r.total} · 취약 ${r.vuln} · 양호 ${r.ok} · 미입력 ${r.empty} · 취약률 ${r.rate}%`}
               className={[
-                "aspect-square rounded-md border p-1",
+                "group aspect-square w-full rounded-lg border p-1",
                 "flex items-center justify-center text-center",
-                "text-[9px] font-semibold leading-[1.15]",
-                "overflow-hidden break-keep",
+                "text-xs font-bold leading-none",
+                "overflow-hidden break-words transition-transform duration-150 hover:-translate-y-0.5",
                 getHeatTone(r),
               ].join(" ")}
             >
-              <span className="line-clamp-3">{r.domain}</span>
+              <span className="line-clamp-2 drop-shadow-[0_1px_0_rgba(255,255,255,0.45)]">{r.domain}</span>
             </div>
           ))}
         </div>
@@ -146,12 +146,12 @@ function DomainHeatmap({ rows }) {
   );
 }
 
-function DomainSummaryTable({ rows }) {
+function DomainSummaryTable({ rows, height }) {
   return (
-    <div className="rounded-2xl bg-white ring-1 ring-slate-200/70 shadow-sm">
+    <div className="rounded-2xl bg-white ring-1 ring-slate-200/70 shadow-sm" style={height ? { height } : undefined}>
       <div className="px-5 pt-5 pb-4 flex items-end justify-between gap-3 flex-wrap">
         <div>
-          <div className="text-sm font-semibold text-slate-900">도메인별 요약</div>
+          <div className="text-base font-bold text-slate-900">도메인별 요약</div>
           <div className="text-xs text-slate-500 mt-1">
             도메인 기준으로 전체/취약/양호/미입력 및 취약률을 집계합니다.
           </div>
@@ -159,9 +159,9 @@ function DomainSummaryTable({ rows }) {
         <div className="text-xs text-slate-500">도메인 {rows.length}개</div>
       </div>
 
-      <div className="px-5 pb-5">
-        <div className="overflow-y-auto overflow-x-hidden rounded-2xl ring-1 ring-slate-200/70 max-h-[560px]">
-          <table className="w-full table-fixed text-[13px] bg-white">
+      <div className="px-5 pb-5" style={height ? { height: "calc(100% - 76px)" } : undefined}>
+        <div className="overflow-y-auto overflow-x-hidden rounded-2xl ring-1 ring-slate-200/70" style={height ? { height: "100%" } : { maxHeight: 560 }}>
+          <table className="w-full table-fixed text-xs bg-white">
             <colgroup>
               <col className="w-auto" />
               <col className="w-14" />
@@ -217,7 +217,59 @@ function DomainSummaryTable({ rows }) {
   );
 }
 
+function TopRiskDomains({ rows, panelRef }) {
+  const topRows = rows.filter((r) => r.vuln > 0).slice(0, 5);
+
+  return (
+    <div ref={panelRef} className="rounded-2xl bg-white ring-1 ring-slate-200/70 shadow-sm">
+      <div className="px-5 pt-5 pb-4 flex items-end justify-between gap-3 flex-wrap">
+        <div>
+          <div className="text-base font-bold text-slate-900">Top 5 취약 도메인</div>
+          <div className="text-xs text-slate-500 mt-1">
+            취약률과 취약 건수를 기준으로 우선 확인이 필요한 도메인입니다.
+          </div>
+        </div>
+        <div className="text-xs text-slate-500">{topRows.length}개 표시</div>
+      </div>
+
+      <div className="px-5 pb-5 space-y-3">
+        {topRows.length ? (
+          topRows.map((row, idx) => (
+            <div
+              key={row.domain}
+              className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3"
+            >
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-rose-100 text-sm font-bold text-rose-700">
+                {idx + 1}
+              </div>
+
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm font-bold text-slate-900">{row.domain}</div>
+                <div className="mt-1 text-xs text-slate-500">
+                  전체 {row.total}건 · 취약 {row.vuln}건 · 양호 {row.ok}건
+                </div>
+              </div>
+
+              <div className="shrink-0 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-right">
+                <div className="text-xs text-rose-600">취약률</div>
+                <div className="text-sm font-bold text-rose-700 tabular-nums">{Math.round(row.rate)}%</div>
+              </div>
+            </div>
+          ))
+        ) : (
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">
+            취약으로 분류된 도메인이 없습니다.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function DashboardPanel({ checklistItems = [] }) {
+  const topRiskRef = useRef(null);
+  const [summaryHeight, setSummaryHeight] = useState(null);
+
   const kpi = useMemo(() => {
     const total = Array.isArray(checklistItems) ? checklistItems.length : 0;
 
@@ -252,6 +304,17 @@ export default function DashboardPanel({ checklistItems = [] }) {
 
   const domainRows = useMemo(() => buildDomainRows(checklistItems), [checklistItems]);
 
+  useEffect(() => {
+    function syncHeight() {
+      const nextHeight = topRiskRef.current?.offsetHeight ?? null;
+      setSummaryHeight(nextHeight);
+    }
+
+    syncHeight();
+    window.addEventListener("resize", syncHeight);
+    return () => window.removeEventListener("resize", syncHeight);
+  }, [domainRows]);
+
   return (
     <div className="w-full max-w-none space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
@@ -284,9 +347,13 @@ export default function DashboardPanel({ checklistItems = [] }) {
       <ProgressPanel done={kpi.vulnDone} total={kpi.total} pctValue={kpi.vulnPct} />
 
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+      <div>
         <DomainHeatmap rows={domainRows} />
-        <DomainSummaryTable rows={domainRows} />
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">
+        <TopRiskDomains rows={domainRows} panelRef={topRiskRef} />
+        <DomainSummaryTable rows={domainRows} height={summaryHeight} />
       </div>
     </div>
   );

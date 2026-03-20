@@ -94,46 +94,43 @@ function ProgressBar({ done, total, highRisk, mediumRisk, lowRisk }) {
 
   const barClass = pct === 100 ? "bg-emerald-500" : pct < 50 ? "bg-rose-500" : "bg-amber-500";
 
-  const statBoxBase = "rounded-xl border border-slate-200 bg-white px-3 py-2";
-  const statTitle = "text-[11px] font-semibold text-slate-500";
-  const statValue = "text-sm font-semibold text-slate-900 tabular-nums";
+  const chipBase = "rounded-lg border px-2.5 py-1";
+  const chipLabel = "text-[11px] font-semibold";
+  const chipValue = "text-xs font-semibold tabular-nums";
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4">
-      <div className="flex items-center justify-between text-sm text-slate-700">
-        <div className="font-semibold">잔여 위험 평가 진행률</div>
+    <div className="w-full rounded-2xl border border-slate-200 bg-white p-3">
+      <div className="flex items-center justify-between text-xs text-slate-700">
+        <div className="text-sm font-bold text-slate-900">잔여 위험 평가 진행률</div>
         <div className="tabular-nums">
           {done}/{total} ({pct}%)
         </div>
       </div>
 
-      <div className="mt-2 h-2 w-full rounded-full bg-slate-100 overflow-hidden">
+      <div className="mt-2 h-1.5 w-full rounded-full bg-slate-100 overflow-hidden">
         <div className={`h-full ${barClass}`} style={{ width: `${pct}%` }} />
       </div>
 
-      <div className="mt-4 grid grid-cols-2 gap-2">
-        <div className={statBoxBase}>
-          <div className={statTitle}>총 대상</div>
-          <div className={statValue}>{total}</div>
+      <div className="mt-2 grid w-full grid-cols-5 gap-1.5">
+        <div className={`${chipBase} border-slate-200 bg-white text-slate-700 text-center min-w-0`}>
+          <span className={chipLabel}>Total</span>
+          <span className={`ml-1 ${chipValue}`}>{total}</span>
         </div>
-        <div className={statBoxBase}>
-          <div className={statTitle}>완료</div>
-          <div className={statValue}>{done}</div>
+        <div className={`${chipBase} border-emerald-200 bg-emerald-50 text-emerald-800 text-center min-w-0`}>
+          <span className={chipLabel}>Done</span>
+          <span className={`ml-1 ${chipValue}`}>{done}</span>
         </div>
-
-        <div className={`${statBoxBase} bg-rose-50 border-rose-200`}>
-          <div className="text-[11px] font-semibold text-rose-600">High</div>
-          <div className="text-sm font-semibold text-rose-900 tabular-nums">{highRisk}</div>
+        <div className={`${chipBase} border-rose-200 bg-rose-50 text-rose-800 text-center min-w-0`}>
+          <span className={chipLabel}>High</span>
+          <span className={`ml-1 ${chipValue}`}>{highRisk}</span>
         </div>
-
-        <div className={`${statBoxBase} bg-amber-50 border-amber-200`}>
-          <div className="text-[11px] font-semibold text-amber-700">Medium</div>
-          <div className="text-sm font-semibold text-amber-900 tabular-nums">{mediumRisk}</div>
+        <div className={`${chipBase} border-amber-200 bg-amber-50 text-amber-800 text-center min-w-0`}>
+          <span className={chipLabel}>Med</span>
+          <span className={`ml-1 ${chipValue}`}>{mediumRisk}</span>
         </div>
-
-        <div className={`${statBoxBase} bg-blue-50 border-blue-200 col-span-2`}>
-          <div className="text-[11px] font-semibold text-blue-700">Low</div>
-          <div className="text-sm font-semibold text-blue-900 tabular-nums">{lowRisk}</div>
+        <div className={`${chipBase} border-blue-200 bg-blue-50 text-blue-800 text-center min-w-0`}>
+          <span className={chipLabel}>Low</span>
+          <span className={`ml-1 ${chipValue}`}>{lowRisk}</span>
         </div>
       </div>
     </div>
@@ -155,9 +152,9 @@ function RiskMatrixMini() {
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-4">
-      <div className="text-sm font-semibold text-slate-800 mb-3">정성적 위험분석 행렬 (Qualitative Risk Matrix)</div>
+      <div className="text-sm font-bold text-slate-900 mb-3">정성적 위험분석 행렬</div>
 
-      <div className="grid grid-cols-[160px_1fr] gap-3">
+      <div className="grid grid-cols-[132px_1fr] gap-3">
         <div />
         <div className="grid grid-cols-3 text-xs font-semibold text-slate-700">
           <div className="text-center">Low</div>
@@ -166,9 +163,9 @@ function RiskMatrixMini() {
         </div>
 
         <div className="space-y-2 text-xs font-semibold text-slate-700">
-          <div className="h-12 flex items-center justify-end pr-2">Highly Likely</div>
-          <div className="h-12 flex items-center justify-end pr-2">Likely</div>
-          <div className="h-12 flex items-center justify-end pr-2">Unlikely</div>
+          <div className="h-10 flex items-center justify-end pr-2">Highly Likely</div>
+          <div className="h-10 flex items-center justify-end pr-2">Likely</div>
+          <div className="h-10 flex items-center justify-end pr-2">Unlikely</div>
         </div>
 
         <div className="grid grid-rows-3 gap-2">
@@ -180,7 +177,7 @@ function RiskMatrixMini() {
                   <div
                     key={`${rIdx}-${cIdx}`}
                     className={[
-                      "h-12 rounded-xl border border-slate-200 flex items-center justify-center",
+                      "h-10 rounded-xl border border-slate-200 flex items-center justify-center",
                       cellBg(n),
                     ].join(" ")}
                   >
@@ -195,7 +192,35 @@ function RiskMatrixMini() {
         </div>
       </div>
 
-      <div className="mt-3 text-xs text-slate-500">* Likelihood/Impact는 DB에는 1~3 정수로 저장됩니다.</div>
+      <div className="mt-3 text-right text-xs text-slate-500">* Likelihood/Impact는 DB에 1~3 정수로 저장됩니다.</div>
+    </div>
+  );
+}
+
+function HighResidualPriority({ rows }) {
+  return (
+    <div className="rounded-2xl border border-rose-200 bg-white p-3">
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-sm font-bold text-slate-900">잔여 High 우선 확인</div>
+        <div className="text-xs text-rose-700">{rows.length}건</div>
+      </div>
+
+      {rows.length === 0 ? (
+        <div className="mt-2 text-xs text-rose-700">현재 잔여 High 항목이 없습니다.</div>
+      ) : (
+        <div className="mt-2 space-y-1.5">
+          {rows.map((x) => (
+            <div key={x.code} className="rounded-lg border border-rose-200 bg-white px-2.5 py-2">
+              <div className="text-xs font-semibold text-slate-900">
+                [{x.code}] {x.itemCode}
+              </div>
+              <div className="mt-1 text-[11px] text-slate-600">
+                담당: {x.owner || "-"} · 기한: {x.due || "-"} · 잔여 Risk: {x.risk}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -276,66 +301,68 @@ function ResidualCard({ row, isSaving, onSave, editable, blockMessage }) {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <div>
-          <div className="text-xs font-semibold text-slate-700 mb-1">Residual Likelihood</div>
-          <select
-            value={resL}
-            onChange={(e) => setResL(e.target.value)}
+      <div className="grid grid-cols-1 lg:grid-cols-[160px_1fr] gap-4 items-stretch">
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 flex flex-col gap-3 h-full min-h-[120px]">
+          <div>
+            <div className="text-xs font-semibold text-slate-700 mb-1">Residual Likelihood</div>
+            <select
+              value={resL}
+              onChange={(e) => setResL(e.target.value)}
+              disabled={!editable || isSaving}
+              className={[
+                "w-full rounded-xl border px-3 py-2 text-sm text-center outline-none",
+                editable
+                  ? "border-slate-200 bg-white focus:ring-2 focus:ring-slate-200"
+                  : "border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed",
+              ].join(" ")}
+            >
+              <option value="">선택</option>
+              <option value="1">{L_LABEL[1]}</option>
+              <option value="2">{L_LABEL[2]}</option>
+              <option value="3">{L_LABEL[3]}</option>
+            </select>
+          </div>
+
+          <div>
+            <div className="text-xs font-semibold text-slate-700 mb-1">Residual Impact</div>
+            <select
+              value={resI}
+              onChange={(e) => setResI(e.target.value)}
+              disabled={!editable || isSaving}
+              className={[
+                "w-full rounded-xl border px-3 py-2 text-sm text-center outline-none",
+                editable
+                  ? "border-slate-200 bg-white focus:ring-2 focus:ring-slate-200"
+                  : "border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed",
+              ].join(" ")}
+            >
+              <option value="">선택</option>
+              <option value="1">{I_LABEL[1]}</option>
+              <option value="2">{I_LABEL[2]}</option>
+              <option value="3">{I_LABEL[3]}</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-slate-200 bg-white p-3 flex flex-col h-full min-h-[120px]">
+          <div className="text-sm font-bold text-slate-800 text-left">잔여 위험 상세 설명</div>
+          <textarea
+            value={detail}
+            onChange={(e) => setDetail(e.target.value)}
             disabled={!editable || isSaving}
             className={[
-              "w-full rounded-xl border px-3 py-2 text-sm text-center outline-none",
+              "w-full flex-1 min-h-[80px] rounded-xl border px-3 py-2 text-sm outline-none",
               editable
                 ? "border-slate-200 bg-white focus:ring-2 focus:ring-slate-200"
                 : "border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed",
             ].join(" ")}
-          >
-            <option value="">선택</option>
-            <option value="1">{L_LABEL[1]}</option>
-            <option value="2">{L_LABEL[2]}</option>
-            <option value="3">{L_LABEL[3]}</option>
-          </select>
-        </div>
-
-        <div>
-          <div className="text-xs font-semibold text-slate-700 mb-1">Residual Impact</div>
-          <select
-            value={resI}
-            onChange={(e) => setResI(e.target.value)}
-            disabled={!editable || isSaving}
-            className={[
-              "w-full rounded-xl border px-3 py-2 text-sm text-center outline-none",
-              editable
-                ? "border-slate-200 bg-white focus:ring-2 focus:ring-slate-200"
-                : "border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed",
-            ].join(" ")}
-          >
-            <option value="">선택</option>
-            <option value="1">{I_LABEL[1]}</option>
-            <option value="2">{I_LABEL[2]}</option>
-            <option value="3">{I_LABEL[3]}</option>
-          </select>
+            placeholder={!editable ? "선행 단계 전체 완료 후 입력 가능" : "조치 후 남는 위험에 대한 설명을 입력하세요"}
+          />
         </div>
       </div>
 
-      <div className="space-y-1">
-        <div className="text-xs font-semibold text-slate-700">잔여 위험 상세 설명</div>
-        <textarea
-          value={detail}
-          onChange={(e) => setDetail(e.target.value)}
-          disabled={!editable || isSaving}
-          className={[
-            "w-full min-h-[140px] rounded-xl border px-3 py-2 text-sm outline-none",
-            editable
-              ? "border-slate-200 bg-white focus:ring-2 focus:ring-slate-200"
-              : "border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed",
-          ].join(" ")}
-          placeholder={!editable ? "선행 단계 전체 완료 후 입력 가능" : "조치 후 남는 위험에 대한 설명을 입력하세요"}
-        />
-      </div>
-
-      <div className="flex items-center justify-between">
-        <div className="text-xs text-slate-500">{isSaving ? "저장 중..." : ""}</div>
+      <div className="flex items-center justify-end gap-2">
+        {isSaving ? <div className="text-xs text-slate-500">저장 중...</div> : null}
         <Button onClick={handleSave} disabled={!editable || isSaving}>
           저장
         </Button>
@@ -347,7 +374,7 @@ function ResidualCard({ row, isSaving, onSave, editable, blockMessage }) {
 export default function ResidualPanel({ checklistItems = [], onUpdated }) {
   const [typeFilter, setTypeFilter] = useState(TYPE_ALL);
   const [domainFilter, setDomainFilter] = useState("");
-  const [onlyMitigate, setOnlyMitigate] = useState(true);
+  const [onlyMitigate, setOnlyMitigate] = useState(false);
   const [page, setPage] = useState(1);
   const [savingCode, setSavingCode] = useState(null);
 
@@ -434,6 +461,25 @@ export default function ResidualPanel({ checklistItems = [], onUpdated }) {
     return { high, med, low };
   }, [targets]);
 
+  const highPriorityRows = useMemo(() => {
+    return targets
+      .map((x) => {
+        const l = x.residual_likelihood == null ? null : Number(x.residual_likelihood);
+        const i = x.residual_impact == null ? null : Number(x.residual_impact);
+        const n = l && i ? riskNumber(l, i) : null;
+        return {
+          code: safeStr(x.code),
+          itemCode: safeStr(x.itemCode ?? x.itemcode),
+          owner: safeStr(x.treatment_owner),
+          due: safeStr(x.treatment_due_date),
+          risk: n,
+        };
+      })
+      .filter((x) => x.risk != null && x.risk <= 3)
+      .sort((a, b) => a.risk - b.risk || a.code.localeCompare(b.code))
+      .slice(0, 5);
+  }, [targets]);
+
   const totalPages = Math.max(1, Math.ceil(targets.length / PAGE_SIZE));
   const pageSafe = Math.min(Math.max(1, page), totalPages);
 
@@ -476,24 +522,24 @@ export default function ResidualPanel({ checklistItems = [], onUpdated }) {
   }
 
   return (
-    <div className="h-[calc(100vh-180px)] flex flex-col gap-4 w-full max-w-none">
-      <div className="sticky top-0 z-10 -mx-6 px-6 bg-slate-50/95 backdrop-blur pt-1">
-        <div className="space-y-4">
+    <div className="panel-shell flex flex-col gap-4 w-full max-w-none">
+      <div className="panel-sticky">
+        <div className="panel-header-stack">
           {!allPrerequisitesCompleted ? (
-            <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3">
-              <div className="text-sm font-semibold text-rose-700">단계 잠금</div>
-              <div className="mt-1 text-sm text-rose-700">{blockMessage}</div>
+            <div className="panel-banner rounded-2xl border border-rose-200 bg-rose-50">
+              <div className="panel-banner-title text-rose-700">단계 잠금</div>
+              <div className="panel-banner-body text-rose-700">{blockMessage}</div>
             </div>
           ) : (
-            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3">
-              <div className="text-sm font-semibold text-emerald-700">단계 활성화</div>
-              <div className="mt-1 text-sm text-emerald-700">
+            <div className="panel-banner rounded-2xl border border-emerald-200 bg-emerald-50">
+              <div className="panel-banner-title text-emerald-700">단계 활성화</div>
+              <div className="panel-banner-body text-emerald-700">
                 Status / 취약 식별 / 위험도 산정 / 위험 대응·조치 단계가 전체 완료되어 잔여 위험 재평가 입력이 가능합니다.
               </div>
             </div>
           )}
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
             <ProgressBar
               done={doneCount}
               total={targets.length}
@@ -501,10 +547,11 @@ export default function ResidualPanel({ checklistItems = [], onUpdated }) {
               mediumRisk={dist.med}
               lowRisk={dist.low}
             />
+            <HighResidualPriority rows={highPriorityRows} />
             <RiskMatrixMini />
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-4">
+          <div className="panel-filter-card rounded-2xl border border-slate-200 bg-white p-4">
             <div className="flex items-center gap-2 flex-wrap">
               <select
                 value={typeFilter}
@@ -572,7 +619,7 @@ export default function ResidualPanel({ checklistItems = [], onUpdated }) {
           <div className="py-10 text-center text-sm text-slate-500">
             잔여 위험 평가 대상이 없습니다.
             <div className="mt-2 text-xs text-slate-400">
-              (기본은 result='취약' + treatment_strategy='감소' 항목만 표시됩니다. 필요하면 '전체 보기'를 눌러 확인하세요.)
+              (기본은 전체 보기입니다. 필요하면 '감소만'으로 좁혀서 확인하세요.)
             </div>
           </div>
         ) : null}
