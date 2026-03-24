@@ -5,14 +5,16 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    const { data: sub } = supabase.auth.onAuthStateChange((event) => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event) => {
       if (event === "SIGNED_IN" || event === "SIGNED_OUT") {
         setLoading(false);
       }
     });
 
     return () => {
-      sub?.subscription?.unsubscribe?.();
+      subscription?.unsubscribe();
     };
   }, []);
 
@@ -20,10 +22,17 @@ export default function LoginPage() {
     try {
       setLoading(true);
 
+      const isGithubPages =
+        window.location.hostname === "sanghakbae.github.io";
+
+      const redirectTo = isGithubPages
+        ? `${window.location.origin}/risk-mgmt-system/`
+        : window.location.origin;
+
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: `${window.location.origin}${window.location.pathname}`,
+          redirectTo,
           queryParams: {
             access_type: "offline",
             prompt: "consent",
@@ -35,8 +44,6 @@ export default function LoginPage() {
         throw error;
       }
 
-      // redirect 방식이면 여기까지 오더라도 페이지가 이동할 수 있음
-      // url이 없으면 로딩을 풀어준다
       if (!data?.url) {
         setLoading(false);
       }
@@ -57,8 +64,14 @@ export default function LoginPage() {
           <div className="mx-auto flex h-9 w-[220px] items-center justify-center rounded-xl border border-slate-500 bg-slate-700 text-xs font-semibold tracking-wide text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.14),0_6px_14px_rgba(15,23,42,0.24)]">
             Risk Management
           </div>
-          <div className="mt-3 text-2xl font-bold tracking-tight text-slate-900">위혐평가 시스템</div>
-          <div className="mt-2 text-sm text-slate-500">Google 계정으로 로그인하세요</div>
+
+          <div className="mt-3 text-2xl font-bold tracking-tight text-slate-900">
+            위험평가 시스템
+          </div>
+
+          <div className="mt-2 text-sm text-slate-500">
+            Google 계정으로 로그인하세요
+          </div>
         </div>
 
         <button
@@ -74,7 +87,8 @@ export default function LoginPage() {
         </button>
 
         <div className="mt-5 text-center text-xs text-slate-400">
-          <span className="font-semibold text-slate-600">muhayu.com</span> 계정만 허용됩니다
+          <span className="font-semibold text-slate-600">muhayu.com</span>{" "}
+          계정만 허용됩니다
         </div>
       </div>
     </div>
