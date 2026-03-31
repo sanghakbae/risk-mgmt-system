@@ -499,7 +499,7 @@ export default function ChecklistPanel({
                 {cols.map((c) => (
                   <th
                     key={c.key}
-                    className="px-3 py-3 text-xs font-semibold text-slate-600 border-b border-slate-200 text-center"
+                    className="px-3 py-3 text-xs font-bold text-black border-b border-slate-200 text-center"
                     style={{ whiteSpace: "nowrap" }}
                   >
                     {c.label}
@@ -518,10 +518,14 @@ export default function ChecklistPanel({
                     if (c.key === "type") v = normalizeType(row.type);
 
                     const isItem = c.key === "itemCode";
+                    const isCentered = ["type", "area", "domain", "code"].includes(c.key);
                     return (
                       <td
                         key={c.key}
-                        className="px-3 py-3 text-sm text-slate-800 align-top"
+                        className={[
+                          "px-3 py-3 text-sm text-slate-800 align-top",
+                          isCentered ? "text-center" : "text-left",
+                        ].join(" ")}
                         style={{ whiteSpace: isItem ? "pre-wrap" : "nowrap" }}
                       >
                         {safeStr(v)}
