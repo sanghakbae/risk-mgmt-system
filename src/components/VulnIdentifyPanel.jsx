@@ -7,6 +7,7 @@ import { parseEvidenceUrls } from "../utils/evidence";
 
 const PAGE_SIZE = 20;
 const TYPE_ALL = "전체";
+const TYPE_ISMS = "ISMS";
 const RESULT_ALL = "전체";
 const DOMAIN_ALL = "";
 const AREA_ALL = "";

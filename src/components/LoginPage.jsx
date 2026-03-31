@@ -59,7 +59,7 @@ export default function LoginPage() {
       <div className="mx-auto flex min-h-screen max-w-5xl items-center justify-center">
         <div className="w-full max-w-[360px] rounded-[18px] border border-white/70 bg-white/92 p-4 shadow-[0_18px_45px_rgba(15,23,42,0.10)] backdrop-blur-sm">
           <div className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold tracking-[0.02em] text-slate-400">
-            security activity monitoring system
+            Risk management system
           </div>
 
           <div className="mt-4 text-[20px] font-bold tracking-[-0.03em] text-slate-900">
