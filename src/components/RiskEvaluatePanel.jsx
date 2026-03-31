@@ -294,7 +294,7 @@ export default function RiskEvaluatePanel({ checklistItems = [], onUpdated }) {
     setDraftByCode({});
   }, [rows]);
 
-  const [typeFilter, setTypeFilter] = useState(TYPE_ALL);
+  const [typeFilter, setTypeFilter] = useState(TYPE_ISMS);
   const [areaFilter, setAreaFilter] = useState("전체");
   const [domainFilter, setDomainFilter] = useState("전체");
   const [statusFilter, setStatusFilter] = useState("전체");

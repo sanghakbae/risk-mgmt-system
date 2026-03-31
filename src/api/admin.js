@@ -63,6 +63,21 @@ export async function fetchRiskEvaluationPolicy() {
   return data?.value ?? null;
 }
 
+export async function fetchChecklistStandard() {
+  const { data, error } = await supabase
+    .from("security_settings")
+    .select("value")
+    .eq("key", "checklist_standard")
+    .maybeSingle();
+
+  if (error) throw error;
+
+  const raw = String(data?.value?.standard ?? "ISMS").trim();
+  const upper = raw.toUpperCase();
+  if (raw === "전체" || upper === "ALL") return "전체";
+  return upper === "ISO27001" ? "ISO27001" : "ISMS";
+}
+
 export async function upsertSecuritySetting({ key, value, description, updatedBy }) {
   const payload = {
     key,
