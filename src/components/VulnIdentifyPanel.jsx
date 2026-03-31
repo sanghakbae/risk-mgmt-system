@@ -137,15 +137,17 @@ function RowCard({ row, isSaving, onSave, editable, blockMessage }) {
   const evidenceUrls = parseEvidenceUrls(row.evidence_url);
 
   return (
-    <div className="w-full max-w-none rounded-2xl border border-slate-200 bg-white p-5 space-y-3">
+    <div className="w-full max-w-none rounded-2xl border border-slate-200 bg-white p-5 space-y-4">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 w-full">
-          <div className="text-sm text-slate-500">
-            {normalizeType(row.type)} · {safeStr(row.area)} · {safeStr(row.domain)}
-          </div>
+          <div className="space-y-1">
+            <div className="text-xs text-slate-500 break-words">
+              {normalizeType(row.type)} · {safeStr(row.area)} · {safeStr(row.domain)}
+            </div>
 
-          <div className="text-sm font-bold text-slate-900 whitespace-pre-wrap">
-            [{safeStr(row.code)}] {safeStr(row.itemCode)}
+            <div className="text-sm font-bold text-slate-900 whitespace-pre-wrap break-words">
+              [{safeStr(row.code)}] {safeStr(row.itemCode)}
+            </div>
           </div>
         </div>
 
@@ -246,7 +248,7 @@ function RowCard({ row, isSaving, onSave, editable, blockMessage }) {
 }
 
 export default function VulnIdentifyPanel({ checklistItems = [], onUpdated }) {
-  const [typeFilter, setTypeFilter] = useState(TYPE_ALL);
+  const [typeFilter, setTypeFilter] = useState(TYPE_ISMS);
   const [areaFilter, setAreaFilter] = useState(AREA_ALL);
   const [domainFilter, setDomainFilter] = useState(DOMAIN_ALL);
   const [resultFilter, setResultFilter] = useState(RESULT_ALL);

@@ -1,5 +1,9 @@
 import { supabase } from "../lib/supabaseClient";
 
+function normalizeRole(role) {
+  return role === "admin" ? "admin" : "viewer";
+}
+
 export async function syncMyProfile(user) {
   if (!user?.id) return null;
 
@@ -35,7 +39,7 @@ export async function fetchMyRole() {
     throw error;
   }
 
-  return data ?? "user";
+  return normalizeRole(data ?? "viewer");
 }
 
 export async function fetchSecuritySettings() {
@@ -46,6 +50,17 @@ export async function fetchSecuritySettings() {
 
   if (error) throw error;
   return data ?? [];
+}
+
+export async function fetchRiskEvaluationPolicy() {
+  const { data, error } = await supabase
+    .from("security_settings")
+    .select("value")
+    .eq("key", "risk_evaluation_policy")
+    .maybeSingle();
+
+  if (error) throw error;
+  return data?.value ?? null;
 }
 
 export async function upsertSecuritySetting({ key, value, description, updatedBy }) {
@@ -72,6 +87,7 @@ export async function fetchAuditLogs({ limit = 30, action = "", actorEmail = "" 
     .from("audit_logs")
     .select("id, actor_user_id, actor_email, action, target_type, target_id, detail, created_at")
     .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
     .limit(limit);
 
   if (action.trim()) {
@@ -126,13 +142,16 @@ export async function fetchUserRoles() {
     .order("created_at", { ascending: true });
 
   if (error) throw error;
-  return data ?? [];
+  return (data ?? []).map((row) => ({
+    ...row,
+    role: normalizeRole(row.role),
+  }));
 }
 
 export async function upsertUserRole({ userId, role }) {
   const payload = {
     user_id: userId,
-    role,
+    role: normalizeRole(role),
     updated_at: new Date().toISOString(),
   };
 
@@ -144,4 +163,20 @@ export async function upsertUserRole({ userId, role }) {
 
   if (error) throw error;
   return data;
+}
+
+export async function deleteManagedUser(userId) {
+  const { error: roleError } = await supabase
+    .from("user_roles")
+    .delete()
+    .eq("user_id", userId);
+
+  if (roleError) throw roleError;
+
+  const { error: profileError } = await supabase
+    .from("profiles")
+    .delete()
+    .eq("user_id", userId);
+
+  if (profileError) throw profileError;
 }

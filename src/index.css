@@ -33,6 +33,7 @@ body,
   --font-size-xl: 20px;
   --font-size-2xl: 24px;
   --font-size-3xl: 30px;
+  --line-height-default: 1.4;
 }
 
 body {
@@ -87,42 +88,48 @@ body {
 
   .text-xs {
     font-size: var(--font-size-xs);
-    line-height: 1.35;
+    line-height: var(--line-height-default);
   }
 
   .text-sm {
     font-size: var(--font-size-sm);
-    line-height: 1.45;
+    line-height: var(--line-height-default);
   }
 
   .text-base {
     font-size: var(--font-size-base);
-    line-height: 1.5;
+    line-height: var(--line-height-default);
   }
 
   .text-lg {
     font-size: var(--font-size-lg);
-    line-height: 1.4;
+    line-height: var(--line-height-default);
   }
 
   .text-xl {
     font-size: var(--font-size-xl);
-    line-height: 1.35;
+    line-height: var(--line-height-default);
   }
 
   .text-2xl {
     font-size: var(--font-size-2xl);
-    line-height: 1.25;
+    line-height: var(--line-height-default);
   }
 
   .text-3xl {
     font-size: var(--font-size-3xl);
-    line-height: 1.15;
+    line-height: var(--line-height-default);
   }
 }
 
 table tbody td {
   font-size: var(--font-size-sm);
+}
+
+table thead th {
+  text-align: center;
+  font-weight: 700;
+  color: rgb(15 23 42);
 }
 
 .panel-shell {

@@ -205,7 +205,7 @@ function ReportContent({ id, reportItems, summary, createdAt, summaryImageUrl })
                   </div>
                   <span
                     className={[
-                      "px-3 py-1 rounded-full border text-xs font-semibold",
+                      "px-1.5 py-[2px] rounded-sm border text-[11px] font-semibold leading-none",
                       badgeClassByResult(resultText),
                     ].join(" ")}
                   >
@@ -379,7 +379,10 @@ export default function ApprovePanel({
   }, [checklistItems]);
 
   const reportItems = useMemo(() => {
-    return Array.isArray(checklistItems) ? checklistItems : [];
+    return (Array.isArray(checklistItems) ? checklistItems : []).filter((x) => {
+      const resultText = safeStr(x.result).trim();
+      return resultText === "양호" || resultText === "취약";
+    });
   }, [checklistItems]);
 
   const vulnerableReportItems = useMemo(
@@ -392,14 +395,19 @@ export default function ApprovePanel({
     [vulnerableReportItems]
   );
 
+  const visibleReportItems = useMemo(() => {
+    if (selectionMode === "vuln") return vulnerableReportItems;
+    return reportItems;
+  }, [reportItems, selectionMode, vulnerableReportItems]);
+
   useEffect(() => {
-    setSelectedCodes(reportItems.map((x) => safeStr(x.code)));
-  }, [reportItems]);
+    setSelectedCodes(visibleReportItems.map((x) => safeStr(x.code)));
+  }, [visibleReportItems]);
 
   const selectedReportItems = useMemo(() => {
     const selectedSet = new Set(selectedCodes.map((x) => safeStr(x)));
-    return reportItems.filter((x) => selectedSet.has(safeStr(x.code)));
-  }, [reportItems, selectedCodes]);
+    return visibleReportItems.filter((x) => selectedSet.has(safeStr(x.code)));
+  }, [visibleReportItems, selectedCodes]);
 
   const selectedSummary = useMemo(() => {
     let vuln = 0;
@@ -661,7 +669,7 @@ export default function ApprovePanel({
                   className="h-8 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 outline-none focus:ring-2 focus:ring-slate-200"
                 >
                   <option value="all">전체 선택</option>
-                  <option value="vuln">취약점 선택</option>
+                  <option value="vuln">취약점만 선택</option>
                 </select>
                 <Button variant="outline" onClick={handleOpenReport} className="h-8 px-3 text-xs">
                   보고서 보기
@@ -729,7 +737,7 @@ export default function ApprovePanel({
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto space-y-3 pr-1 pb-6">
-        {reportItems.map((row) => {
+        {visibleReportItems.map((row) => {
           const code = safeStr(row.code);
           const title = safeStr(row.itemCode || row.itemcode || "");
           const statusText = safeStr(row.status).trim();
@@ -766,7 +774,7 @@ export default function ApprovePanel({
 
                 <span
                   className={[
-                    "px-3 py-1 rounded-full border text-xs font-semibold",
+                    "px-1.5 py-[2px] rounded-sm border text-[11px] font-semibold leading-none",
                     badgeClassByResult(resultText),
                   ].join(" ")}
                 >
@@ -874,7 +882,7 @@ export default function ApprovePanel({
           );
         })}
 
-        {reportItems.length === 0 ? (
+        {visibleReportItems.length === 0 ? (
           <div className="py-10 text-center text-sm text-slate-500">표시할 항목이 없습니다.</div>
         ) : null}
 

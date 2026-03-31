@@ -60,7 +60,7 @@ function KpiCard({ title, value, sub, tone = "slate" }) {
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <span className={`inline-block w-2 h-2 rounded-full ${t.dot}`} />
-              <div className="text-xs font-semibold text-slate-500 truncate">{title}</div>
+              <div className="text-sm font-bold text-slate-900 truncate">{title}</div>
             </div>
 
             <div className="mt-2 text-3xl font-extrabold tracking-tight text-slate-900 tabular-nums">
@@ -69,7 +69,7 @@ function KpiCard({ title, value, sub, tone = "slate" }) {
           </div>
         </div>
 
-        {sub ? <div className="mt-2 text-xs text-slate-500">{sub}</div> : null}
+        {sub ? <div className="mt-2 text-sm font-semibold text-slate-900">{sub}</div> : null}
       </div>
     </div>
   );
@@ -80,12 +80,12 @@ function ProgressPanel({ done, total, pctValue }) {
     <div className="rounded-2xl bg-white border border-slate-200 shadow-sm px-5 py-5">
       <div className="flex items-end justify-between gap-3 flex-wrap">
         <div>
-          <div className="text-base font-bold text-slate-900">평가 진행률</div>
+          <div className="text-lg font-bold text-slate-900">평가 진행률</div>
         </div>
-        <div className="text-sm font-medium text-slate-600 tabular-nums">{pctValue}%</div>
+        <div className="text-base font-bold text-slate-900 tabular-nums">{pctValue}%</div>
       </div>
 
-      <div className="mt-3 flex items-center justify-between gap-3 text-xs text-slate-500">
+      <div className="mt-3 flex items-center justify-between gap-3 text-sm font-semibold text-slate-900">
         <span>{done} / {total} 완료</span>
         <span className="tabular-nums">{pctValue}%</span>
       </div>
@@ -112,19 +112,19 @@ function getHeatTone(r) {
 
 function DomainHeatmap({ rows }) {
   return (
-    <div className="rounded-2xl bg-white ring-1 ring-slate-200/70 shadow-sm">
-      <div className="px-5 pt-5 pb-4 flex items-end justify-between gap-3 flex-wrap">
+    <div className="w-full rounded-2xl bg-white ring-1 ring-slate-200/70 shadow-sm">
+      <div className="px-5 pt-5 pb-4 flex items-start justify-between gap-3 flex-wrap">
         <div>
-          <div className="text-base font-bold text-slate-900">도메인 위험 히트맵</div>
-          <div className="text-xs text-slate-500 mt-1">
+          <div className="text-lg font-bold text-slate-900">도메인 위험 히트맵</div>
+          <div className="mt-1 text-sm font-semibold text-slate-900">
             도메인별 취약 여부와 평가 상태를 한눈에 확인합니다.
           </div>
         </div>
-        <div className="text-xs text-slate-500">도메인 {rows.length}개</div>
+        <div className="pt-0.5 text-sm font-bold leading-[1.25] text-slate-900">도메인 {rows.length}개</div>
       </div>
 
       <div className="px-5 pb-5">
-        <div className="grid grid-cols-6 sm:grid-cols-7 lg:grid-cols-9 xl:grid-cols-12 gap-1.5">
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(84px,96px))] justify-center gap-1.5">
           {rows.map((r) => (
             <div
               key={r.domain}
@@ -132,7 +132,7 @@ function DomainHeatmap({ rows }) {
               className={[
                 "group aspect-square w-full rounded-lg border p-1",
                 "flex items-center justify-center text-center",
-                "text-xs font-bold leading-none",
+                "text-sm font-bold leading-none",
                 "overflow-hidden break-words transition-transform duration-150 hover:-translate-y-0.5",
                 getHeatTone(r),
               ].join(" ")}
@@ -151,17 +151,17 @@ function DomainSummaryTable({ rows, height }) {
     <div className="rounded-2xl bg-white ring-1 ring-slate-200/70 shadow-sm" style={height ? { height } : undefined}>
       <div className="px-5 pt-5 pb-4 flex items-end justify-between gap-3 flex-wrap">
         <div>
-          <div className="text-base font-bold text-slate-900">도메인별 요약</div>
-          <div className="text-xs text-slate-500 mt-1">
+          <div className="text-lg font-bold text-slate-900">도메인별 요약</div>
+          <div className="mt-1 text-sm font-semibold text-slate-900">
             도메인 기준으로 전체/취약/양호/미입력 및 취약률을 집계합니다.
           </div>
         </div>
-        <div className="text-xs text-slate-500">도메인 {rows.length}개</div>
+        <div className="text-sm font-bold text-slate-900">도메인 {rows.length}개</div>
       </div>
 
       <div className="px-5 pb-5" style={height ? { height: "calc(100% - 76px)" } : undefined}>
         <div className="overflow-y-auto overflow-x-hidden rounded-2xl ring-1 ring-slate-200/70" style={height ? { height: "100%" } : { maxHeight: 560 }}>
-          <table className="w-full table-fixed text-xs bg-white">
+          <table className="w-full table-fixed text-sm bg-white">
             <colgroup>
               <col className="w-auto" />
               <col className="w-14" />
@@ -172,13 +172,13 @@ function DomainSummaryTable({ rows, height }) {
             </colgroup>
 
             <thead className="bg-slate-50 sticky top-0 z-10">
-              <tr className="text-xs text-slate-600 border-b border-slate-200">
-                <th className="text-center py-1.5 px-2 font-semibold">도메인</th>
-                <th className="text-center py-1.5 px-2 font-semibold">전체</th>
-                <th className="text-center py-1.5 px-2 font-semibold">취약</th>
-                <th className="text-center py-1.5 px-2 font-semibold">양호</th>
-                <th className="text-center py-1.5 px-2 font-semibold">미입력</th>
-                <th className="text-center py-1.5 px-2 font-semibold">취약률</th>
+              <tr className="text-sm text-slate-700 border-b border-slate-200">
+                <th className="text-center py-1.5 px-2 font-bold">도메인</th>
+                <th className="text-center py-1.5 px-2 font-bold">전체</th>
+                <th className="text-center py-1.5 px-2 font-bold">취약</th>
+                <th className="text-center py-1.5 px-2 font-bold">양호</th>
+                <th className="text-center py-1.5 px-2 font-bold">미입력</th>
+                <th className="text-center py-1.5 px-2 font-bold">취약률</th>
               </tr>
             </thead>
 
@@ -193,12 +193,12 @@ function DomainSummaryTable({ rows, height }) {
                     "text-slate-800",
                   ].join(" ")}
                 >
-                  <td className="py-1.5 px-2 font-medium truncate text-left">{r.domain}</td>
-                  <td className="py-1.5 px-2 text-center tabular-nums">{r.total}</td>
-                  <td className="py-1.5 px-2 text-center tabular-nums">{r.vuln}</td>
-                  <td className="py-1.5 px-2 text-center tabular-nums">{r.ok}</td>
-                  <td className="py-1.5 px-2 text-center tabular-nums">{r.empty}</td>
-                  <td className="py-1.5 px-2 text-center font-semibold tabular-nums">{r.rate}%</td>
+                  <td className="py-1.5 px-2 font-semibold truncate text-left">{r.domain}</td>
+                  <td className="py-1.5 px-2 text-center font-semibold tabular-nums">{r.total}</td>
+                  <td className="py-1.5 px-2 text-center font-semibold tabular-nums">{r.vuln}</td>
+                  <td className="py-1.5 px-2 text-center font-semibold tabular-nums">{r.ok}</td>
+                  <td className="py-1.5 px-2 text-center font-semibold tabular-nums">{r.empty}</td>
+                  <td className="py-1.5 px-2 text-center font-bold tabular-nums">{r.rate}%</td>
                 </tr>
               ))}
 
@@ -224,12 +224,12 @@ function TopRiskDomains({ rows, panelRef }) {
     <div ref={panelRef} className="rounded-2xl bg-white ring-1 ring-slate-200/70 shadow-sm">
       <div className="px-5 pt-5 pb-4 flex items-end justify-between gap-3 flex-wrap">
         <div>
-          <div className="text-base font-bold text-slate-900">Top 5 취약 도메인</div>
-          <div className="text-xs text-slate-500 mt-1">
+          <div className="text-lg font-bold text-slate-900">Top 5 취약 도메인</div>
+          <div className="mt-1 text-sm font-semibold text-slate-900">
             취약률과 취약 건수를 기준으로 우선 확인이 필요한 도메인입니다.
           </div>
         </div>
-        <div className="text-xs text-slate-500">{topRows.length}개 표시</div>
+        <div className="text-sm font-bold text-slate-900">{topRows.length}개 표시</div>
       </div>
 
       <div className="px-5 pb-5 space-y-3">
@@ -244,15 +244,15 @@ function TopRiskDomains({ rows, panelRef }) {
               </div>
 
               <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-bold text-slate-900">{row.domain}</div>
-                <div className="mt-1 text-xs text-slate-500">
+                <div className="truncate text-base font-bold text-slate-900">{row.domain}</div>
+                <div className="mt-1 text-sm font-semibold text-slate-900">
                   전체 {row.total}건 · 취약 {row.vuln}건 · 양호 {row.ok}건
                 </div>
               </div>
 
               <div className="shrink-0 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-right">
-                <div className="text-xs text-rose-600">취약률</div>
-                <div className="text-sm font-bold text-rose-700 tabular-nums">{Math.round(row.rate)}%</div>
+                <div className="text-sm font-semibold text-rose-600">취약률</div>
+                <div className="text-base font-bold text-rose-700 tabular-nums">{Math.round(row.rate)}%</div>
               </div>
             </div>
           ))

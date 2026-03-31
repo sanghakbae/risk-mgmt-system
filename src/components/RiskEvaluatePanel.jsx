@@ -4,12 +4,15 @@ import { updateChecklistByCode } from "../api/checklist";
 import EvidenceModalTrigger from "./EvidenceModalTrigger";
 import TopProgressBar from "./TopProgressBar";
 import { parseEvidenceUrls } from "../utils/evidence";
+import { fetchRiskEvaluationPolicy } from "../api/admin";
 
 const PAGE_SIZE = 5;
 
 const TYPE_ALL = "전체";
 const TYPE_ISMS = "ISMS";
 const TYPE_ISO = "ISO27001";
+const DEFAULT_RISK_HIGH_MAX = 3;
+const DEFAULT_RISK_MEDIUM_MAX = 6;
 
 function safeStr(v) {
   return v == null ? "" : String(v);
@@ -92,17 +95,21 @@ function riskNumber(l, i) {
   return map[`${l}-${i}`] ?? null;
 }
 
-function riskLabelFromNumber(n) {
+function riskLabelFromNumber(n, policy) {
+  const highMax = Number(policy?.highMax ?? DEFAULT_RISK_HIGH_MAX);
+  const mediumMax = Number(policy?.mediumMax ?? DEFAULT_RISK_MEDIUM_MAX);
   if (n == null) return "Risk -";
-  if (n <= 3) return `Risk ${n} · High`;
-  if (n <= 6) return `Risk ${n} · Medium`;
+  if (n <= highMax) return `Risk ${n} · High`;
+  if (n <= mediumMax) return `Risk ${n} · Medium`;
   return `Risk ${n} · Low`;
 }
 
-function badgeClassFromRisk(n) {
+function badgeClassFromRisk(n, policy) {
+  const highMax = Number(policy?.highMax ?? DEFAULT_RISK_HIGH_MAX);
+  const mediumMax = Number(policy?.mediumMax ?? DEFAULT_RISK_MEDIUM_MAX);
   if (n == null) return "bg-slate-50 text-slate-600 border-slate-200";
-  if (n <= 3) return "bg-rose-50 text-rose-700 border-rose-200";
-  if (n <= 6) return "bg-amber-50 text-amber-800 border-amber-200";
+  if (n <= highMax) return "bg-rose-50 text-rose-700 border-rose-200";
+  if (n <= mediumMax) return "bg-amber-50 text-amber-800 border-amber-200";
   return "bg-blue-50 text-blue-700 border-blue-200";
 }
 
@@ -127,7 +134,7 @@ function EvidencePreviewInline({ urls = [] }) {
   );
 }
 
-function RiskCard({ row, draft, onChangeDraft, onSave, saving, editable, blockMessage }) {
+function RiskCard({ row, draft, onChangeDraft, onSave, saving, editable, blockMessage, riskPolicy }) {
   const code = safeStr(row.code);
   const type = normalizeType(row.type);
   const area = safeStr(row.area);
@@ -147,12 +154,14 @@ function RiskCard({ row, draft, onChangeDraft, onSave, saving, editable, blockMe
     <div className="rounded-2xl border border-slate-200 bg-white p-5 space-y-4 text-sm text-slate-800">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="text-sm text-slate-500 whitespace-pre-wrap">
-            {type} · {area} · {domain}
-          </div>
+          <div className="space-y-1">
+            <div className="text-xs text-slate-500 whitespace-pre-wrap break-words">
+              {type} · {area} · {domain}
+            </div>
 
-          <div className="mt-1 text-sm font-semibold text-slate-900 whitespace-pre-wrap">
-            [{code}] {title}
+            <div className="text-sm font-bold text-slate-900 whitespace-pre-wrap break-words">
+              [{code}] {title}
+            </div>
           </div>
         </div>
 
@@ -160,10 +169,10 @@ function RiskCard({ row, draft, onChangeDraft, onSave, saving, editable, blockMe
           <span
             className={[
               "px-3 py-1 rounded-full border text-sm font-semibold",
-              badgeClassFromRisk(rn),
+              badgeClassFromRisk(rn, riskPolicy),
             ].join(" ")}
           >
-            {riskLabelFromNumber(rn)}
+            {riskLabelFromNumber(rn, riskPolicy)}
           </span>
         </div>
       </div>
@@ -293,6 +302,34 @@ export default function RiskEvaluatePanel({ checklistItems = [], onUpdated }) {
 
   const [page, setPage] = useState(1);
   const [savingCode, setSavingCode] = useState(null);
+  const [riskPolicy, setRiskPolicy] = useState({
+    highMax: DEFAULT_RISK_HIGH_MAX,
+    mediumMax: DEFAULT_RISK_MEDIUM_MAX,
+  });
+
+  useEffect(() => {
+    let mounted = true;
+
+    (async () => {
+      try {
+        const value = await fetchRiskEvaluationPolicy();
+        if (!mounted) return;
+
+        const highMax = Number(value?.high_max);
+        const mediumMax = Number(value?.medium_max);
+
+        if (Number.isFinite(highMax) && Number.isFinite(mediumMax) && highMax < mediumMax) {
+          setRiskPolicy({ highMax, mediumMax });
+        }
+      } catch (e) {
+        console.error("risk evaluation policy load error:", e);
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const totalCount = useMemo(() => rows.length, [rows]);
   const riskTargetCount = useMemo(() => rows.filter(isVulnerable).length, [rows]);
@@ -593,11 +630,12 @@ export default function RiskEvaluatePanel({ checklistItems = [], onUpdated }) {
               onChangeDraft={(c, patch) => setDraft(c, patch)}
               onSave={handleSave}
               saving={savingCode === code}
-              editable={allVulnCompleted}
-              blockMessage={blockMessage}
-            />
-          );
-        })}
+                editable={allVulnCompleted}
+                blockMessage={blockMessage}
+                riskPolicy={riskPolicy}
+              />
+            );
+          })}
 
         {paged.length === 0 ? (
           <div className="py-10 text-center text-sm text-slate-500">표시할 항목이 없습니다.</div>

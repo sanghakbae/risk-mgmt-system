@@ -9,6 +9,8 @@ const MAX_SESSION_TIMEOUT_MINUTES = 1440;
 const DEFAULT_LOG_RETENTION_DAYS = 180;
 const MIN_LOG_RETENTION_DAYS = 1;
 const MAX_LOG_RETENTION_DAYS = 3650;
+const STANDARD_OPTIONS = ["ISMS", "ISO27001"];
+const DEFAULT_DOA_THRESHOLD = 6;
 
 function cardClass() {
   return "rounded-2xl border border-slate-200 bg-white p-4";
@@ -44,15 +46,58 @@ function normalizePositiveInteger(value) {
   return n;
 }
 
-export default function AdminSecurityPanel({ session, reloadKey, onChanged }) {
+function normalizeRiskPolicyValue(value) {
+  const raw = value ?? {};
+
+  if (Number.isFinite(Number(raw?.doa_threshold))) {
+    const normalized = {
+      doa_threshold: parseNumber(raw.doa_threshold, DEFAULT_DOA_THRESHOLD),
+    };
+    return {
+      ISMS: normalized,
+      ISO27001: normalized,
+    };
+  }
+
+  if (Number.isFinite(Number(raw?.high_max)) && Number.isFinite(Number(raw?.medium_max))) {
+    const normalized = {
+      doa_threshold: parseNumber(raw.medium_max, DEFAULT_DOA_THRESHOLD),
+    };
+    return {
+      ISMS: normalized,
+      ISO27001: normalized,
+    };
+  }
+
+  return {
+    ISMS: {
+      doa_threshold: parseNumber(
+        raw?.ISMS?.doa_threshold ?? raw?.ISMS?.medium_max,
+        DEFAULT_DOA_THRESHOLD
+      ),
+    },
+    ISO27001: {
+      doa_threshold: parseNumber(
+        raw?.ISO27001?.doa_threshold ?? raw?.ISO27001?.medium_max,
+        DEFAULT_DOA_THRESHOLD
+      ),
+    },
+  };
+}
+
+export default function AdminSecurityPanel({ session, reloadKey, onChanged, canManage = false }) {
   const [loading, setLoading] = useState(true);
   const [savingKey, setSavingKey] = useState("");
   const [error, setError] = useState("");
 
   const [allowedDomainsText, setAllowedDomainsText] = useState(DEFAULT_ALLOWED_DOMAINS.join(", "));
-  const [adminMfaRequired, setAdminMfaRequired] = useState(true);
   const [sessionTimeoutMinutes, setSessionTimeoutMinutes] = useState(DEFAULT_SESSION_TIMEOUT_MINUTES);
   const [logRetentionDays, setLogRetentionDays] = useState(DEFAULT_LOG_RETENTION_DAYS);
+  const [selectedStandard, setSelectedStandard] = useState("ISMS");
+  const [doaThreshold, setDoaThreshold] = useState(DEFAULT_DOA_THRESHOLD);
+  const [riskPolicyByStandard, setRiskPolicyByStandard] = useState(() =>
+    normalizeRiskPolicyValue(null)
+  );
   const [rawRows, setRawRows] = useState([]);
 
   useEffect(() => {
@@ -83,7 +128,6 @@ export default function AdminSecurityPanel({ session, reloadKey, onChanged }) {
             .join(", ")
         );
 
-        setAdminMfaRequired(Boolean(byKey.admin_mfa_required?.value?.enabled ?? true));
         setSessionTimeoutMinutes(
           parseNumber(
             byKey.session_timeout_minutes?.value?.minutes,
@@ -96,6 +140,9 @@ export default function AdminSecurityPanel({ session, reloadKey, onChanged }) {
             DEFAULT_LOG_RETENTION_DAYS
           )
         );
+        const nextPolicy = normalizeRiskPolicyValue(byKey.risk_evaluation_policy?.value);
+        setRiskPolicyByStandard(nextPolicy);
+        setDoaThreshold(parseNumber(nextPolicy.ISMS?.doa_threshold, DEFAULT_DOA_THRESHOLD));
       } catch (e) {
         if (!mounted) return;
         console.error(e);
@@ -110,6 +157,11 @@ export default function AdminSecurityPanel({ session, reloadKey, onChanged }) {
       mounted = false;
     };
   }, [reloadKey]);
+
+  useEffect(() => {
+    const current = riskPolicyByStandard[selectedStandard] ?? {};
+    setDoaThreshold(parseNumber(current.doa_threshold, DEFAULT_DOA_THRESHOLD));
+  }, [selectedStandard, riskPolicyByStandard]);
 
   async function saveSetting(key, value, description) {
     try {
@@ -159,14 +211,6 @@ export default function AdminSecurityPanel({ session, reloadKey, onChanged }) {
       "allowed_domain",
       { domains },
       "허용 이메일 도메인 목록"
-    );
-  }
-
-  async function handleSaveAdminMfaRequired() {
-    await saveSetting(
-      "admin_mfa_required",
-      { enabled: Boolean(adminMfaRequired) },
-      "관리자 MFA 강제 여부"
     );
   }
 
@@ -220,6 +264,33 @@ export default function AdminSecurityPanel({ session, reloadKey, onChanged }) {
     );
   }
 
+  async function handleSaveRiskEvaluationPolicy() {
+    const threshold = normalizePositiveInteger(doaThreshold);
+
+    if (!Number.isFinite(threshold)) {
+      alert("DoA 기준값은 정수로 입력해야 합니다.");
+      return;
+    }
+
+    if (threshold < 1) {
+      alert("DoA 기준값은 1 이상이어야 합니다.");
+      return;
+    }
+
+    await saveSetting(
+      "risk_evaluation_policy",
+      {
+        ...riskPolicyByStandard,
+        [selectedStandard]: { doa_threshold: threshold },
+      },
+      "DoA 등급 기준"
+    );
+    setRiskPolicyByStandard((prev) => ({
+      ...prev,
+      [selectedStandard]: { doa_threshold: threshold },
+    }));
+  }
+
   const rawPreview = useMemo(
     () => rawRows.map((r) => ({ ...r, value: r.value ?? {} })),
     [rawRows]
@@ -234,7 +305,9 @@ export default function AdminSecurityPanel({ session, reloadKey, onChanged }) {
       <div className={cardClass()}>
         <div className="panel-banner-title text-slate-900">보안 설정</div>
         <div className="panel-banner-body text-slate-500">
-          관리자만 수정할 수 있습니다. 저장 시 감사 로그에 기록됩니다.
+          {canManage
+            ? "관리자만 수정할 수 있습니다. 저장 시 감사 로그에 기록됩니다."
+            : "viewer는 열람만 가능합니다. 수정은 관리자만 할 수 있습니다."}
         </div>
         {error ? <div className="mt-3 text-sm text-rose-600">{error}</div> : null}
       </div>
@@ -250,10 +323,11 @@ export default function AdminSecurityPanel({ session, reloadKey, onChanged }) {
               value={allowedDomainsText}
               onChange={(e) => setAllowedDomainsText(e.target.value)}
               placeholder="muhayu.com"
+              disabled={!canManage}
             />
             <Button
               onClick={handleSaveAllowedDomains}
-              disabled={savingKey === "allowed_domain"}
+              disabled={!canManage || savingKey === "allowed_domain"}
             >
               저장
             </Button>
@@ -261,29 +335,6 @@ export default function AdminSecurityPanel({ session, reloadKey, onChanged }) {
 
           <div className="mt-2 text-xs text-slate-500">
             예: <span className="font-medium">muhayu.com</span>
-          </div>
-        </div>
-
-        <div className={cardClass()}>
-          <div className="text-sm font-semibold text-slate-900">관리자 MFA 강제</div>
-          <div className="text-xs text-slate-500 mt-1">관리자 추가 인증 요구 여부</div>
-
-          <div className="mt-4 flex items-center justify-between gap-3">
-            <label className="inline-flex items-center gap-2 text-sm text-slate-700">
-              <input
-                type="checkbox"
-                checked={adminMfaRequired}
-                onChange={(e) => setAdminMfaRequired(e.target.checked)}
-              />
-              MFA 필수
-            </label>
-
-            <Button
-              onClick={handleSaveAdminMfaRequired}
-              disabled={savingKey === "admin_mfa_required"}
-            >
-              저장
-            </Button>
           </div>
         </div>
 
@@ -302,10 +353,11 @@ export default function AdminSecurityPanel({ session, reloadKey, onChanged }) {
               className="flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-slate-400"
               value={sessionTimeoutMinutes}
               onChange={(e) => setSessionTimeoutMinutes(e.target.value)}
+              disabled={!canManage}
             />
             <Button
               onClick={handleSaveSessionTimeout}
-              disabled={savingKey === "session_timeout_minutes"}
+              disabled={!canManage || savingKey === "session_timeout_minutes"}
             >
               저장
             </Button>
@@ -331,10 +383,59 @@ export default function AdminSecurityPanel({ session, reloadKey, onChanged }) {
               className="flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-slate-400"
               value={logRetentionDays}
               onChange={(e) => setLogRetentionDays(e.target.value)}
+              disabled={!canManage}
             />
             <Button
               onClick={handleSaveLogRetentionDays}
-              disabled={savingKey === "log_retention_days"}
+              disabled={!canManage || savingKey === "log_retention_days"}
+            >
+              저장
+            </Button>
+          </div>
+        </div>
+
+        <div className={cardClass()}>
+          <div className="text-sm font-semibold text-slate-900">DoA 기준</div>
+          <div className="text-xs text-slate-500 mt-1">
+            표준을 선택하면 해당 DoA 기준값 1개만 표시하고 저장합니다.
+          </div>
+
+          <div className="mt-4">
+            <select
+              value={selectedStandard}
+              onChange={(e) => setSelectedStandard(e.target.value)}
+              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-slate-400"
+              disabled={!canManage}
+            >
+              {STANDARD_OPTIONS.map((standard) => (
+                <option key={standard} value={standard}>
+                  {standard}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="mt-3">
+            <input
+              type="number"
+              min="1"
+              step="1"
+              className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-slate-400"
+              value={doaThreshold}
+              onChange={(e) => setDoaThreshold(e.target.value)}
+              disabled={!canManage}
+              placeholder="DoA 기준값"
+            />
+          </div>
+
+          <div className="mt-2 text-xs text-slate-500">
+            {selectedStandard} 기준 예: Risk {doaThreshold || DEFAULT_DOA_THRESHOLD} 이하는 허용, 그 초과는 조치 필요
+          </div>
+
+          <div className="mt-4">
+            <Button
+              onClick={handleSaveRiskEvaluationPolicy}
+              disabled={!canManage || savingKey === "risk_evaluation_policy"}
             >
               저장
             </Button>

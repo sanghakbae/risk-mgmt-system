@@ -93,7 +93,7 @@ export default function StatusWritePanel({ checklistItems = [], onUpdated }) {
   const rows = useMemo(() => (Array.isArray(checklistItems) ? checklistItems : []), [checklistItems]);
 
   // ✅ 상단 필터 상태: 유형 → 영역 → 도메인
-  const [typeFilter, setTypeFilter] = useState("전체");
+  const [typeFilter, setTypeFilter] = useState("ISMS");
   const [areaFilter, setAreaFilter] = useState("전체");
   const [domainFilter, setDomainFilter] = useState("전체");
   const [statusFilter, setStatusFilter] = useState("전체"); // 입력됨/미입력
@@ -495,13 +495,12 @@ export default function StatusWritePanel({ checklistItems = [], onUpdated }) {
             <div
               key={code}
               className="rounded-2xl border border-slate-200 bg-white p-5 space-y-4"
-              style={{ lineHeight: 1.35 }}
             >
               <div className="space-y-1">
                 {metaLine ? (
-                  <div className="text-xs leading-[1.35] text-slate-500 break-words">{metaLine}</div>
+                  <div className="text-xs text-slate-500 break-words">{metaLine}</div>
                 ) : null}
-                <div className="text-sm leading-[1.35] font-extrabold text-slate-900 break-words">{title}</div>
+                <div className="text-sm font-bold text-slate-900 break-words whitespace-pre-wrap">{title}</div>
               </div>
 
               {guideText ? (

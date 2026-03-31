@@ -24,6 +24,13 @@ function clamp(n, min, max) {
   return Math.max(min, Math.min(max, n));
 }
 
+function formatFileTimestamp(date = new Date()) {
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}_${pad(
+    date.getHours()
+  )}${pad(date.getMinutes())}${pad(date.getSeconds())}`;
+}
+
 function compareCode(a, b) {
   const aa = safeStr(a).split(".").map((x) => Number(x));
   const bb = safeStr(b).split(".").map((x) => Number(x));
@@ -62,14 +69,18 @@ function isChecklistDefined(row) {
   );
 }
 
-export default function ChecklistPanel({ checklistItems = [] }) {
+export default function ChecklistPanel({
+  checklistItems = [],
+  setChecklistItems,
+  onReload,
+}) {
   const rows = useMemo(() => {
     const base = Array.isArray(checklistItems) ? checklistItems : [];
     return [...base].sort((a, b) => compareCode(a?.code, b?.code));
   }, [checklistItems]);
 
   // ✅ 필터: 유형 → 영역 → 도메인
-  const [typeFilter, setTypeFilter] = useState("전체");
+  const [typeFilter, setTypeFilter] = useState("ISMS");
   const [areaFilter, setAreaFilter] = useState("전체");
   const [domainFilter, setDomainFilter] = useState("전체");
   const [keyword, setKeyword] = useState("");
@@ -245,7 +256,7 @@ export default function ChecklistPanel({ checklistItems = [] }) {
 
       const link = document.createElement("a");
       link.href = url;
-      link.download = "checklist_all_columns.csv";
+      link.download = `checklist_all_columns_${formatFileTimestamp()}.csv`;
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -265,6 +276,19 @@ export default function ChecklistPanel({ checklistItems = [] }) {
 
     delete out.id;
     delete out.created_at;
+
+    if (out.type == null && out["구분"] != null) {
+      out.type = out["구분"];
+    }
+    if (out.type == null && out["유형"] != null) {
+      out.type = out["유형"];
+    }
+    if (out.type == null && out["표준"] != null) {
+      out.type = out["표준"];
+    }
+    delete out["구분"];
+    delete out["유형"];
+    delete out["표준"];
 
     if (out.itemCode != null && out.itemcode == null) {
       out.itemcode = out.itemCode;
@@ -293,6 +317,26 @@ export default function ChecklistPanel({ checklistItems = [] }) {
       const { error } = await supabase.from("checklist").upsert(chunk, { onConflict: "code" });
       if (error) throw error;
     }
+  }
+
+  async function reloadChecklistRows() {
+    const { data, error } = await supabase
+      .from("checklist")
+      .select("*")
+      .order("code", { ascending: true });
+
+    if (error) throw error;
+
+    const normalized = Array.isArray(data) ? [...data].sort((a, b) => compareCode(a?.code, b?.code)) : [];
+    setChecklistItems?.(normalized);
+
+    try {
+      localStorage.setItem("checklist_cache_v1", JSON.stringify(normalized));
+    } catch (e) {
+      console.warn("checklist cache save error", e);
+    }
+
+    onReload?.();
   }
 
   async function onImportFile(e) {
@@ -336,6 +380,7 @@ export default function ChecklistPanel({ checklistItems = [] }) {
       }
 
       await upsertChecklist(rowsClean);
+      await reloadChecklistRows();
       alert(`Import 완료: ${rowsClean.length}건 처리`);
     } catch (err) {
       console.error("Import failed:", err);

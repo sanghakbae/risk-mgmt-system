@@ -3,6 +3,8 @@ import React, { useEffect, useMemo, useState } from "react";
 import Button from "../ui/Button";
 import { fetchAuditLogs } from "../api/admin";
 
+const PAGE_SIZE = 20;
+
 function cardClass() {
   return "rounded-2xl border border-slate-200 bg-white p-4";
 }
@@ -30,14 +32,17 @@ export default function AdminAuditLogsPanel({ reloadKey }) {
   const [actionKeyword, setActionKeyword] = useState("");
   const [actorEmailKeyword, setActorEmailKeyword] = useState("");
   const [expandedId, setExpandedId] = useState(null);
+  const [page, setPage] = useState(1);
 
   async function load() {
     setLoading(true);
     setError("");
+    setExpandedId(null);
+    setPage(1);
 
     try {
       const rows = await fetchAuditLogs({
-        limit: 30,
+        limit: 200,
         action: actionKeyword,
         actorEmail: actorEmailKeyword,
       });
@@ -64,6 +69,17 @@ export default function AdminAuditLogsPanel({ reloadKey }) {
       uniqueActions,
     };
   }, [logs]);
+
+  const totalPages = useMemo(() => {
+    const count = Math.ceil(logs.length / PAGE_SIZE);
+    return count > 0 ? count : 1;
+  }, [logs.length]);
+
+  const pagedLogs = useMemo(() => {
+    const safePage = Math.min(Math.max(page, 1), totalPages);
+    const start = (safePage - 1) * PAGE_SIZE;
+    return logs.slice(start, start + PAGE_SIZE);
+  }, [logs, page, totalPages]);
 
   return (
     <div className="space-y-4">
@@ -115,59 +131,87 @@ export default function AdminAuditLogsPanel({ reloadKey }) {
         ) : logs.length === 0 ? (
           <div className="text-slate-500">조회된 로그가 없습니다.</div>
         ) : (
-          <div className="max-h-[420px] overflow-auto">
-            <table className="w-full min-w-[960px] text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 text-left text-slate-500">
-                  <th className="py-3 pr-3">일시</th>
-                  <th className="py-3 pr-3">행위자</th>
-                  <th className="py-3 pr-3">Action</th>
-                  <th className="py-3 pr-3">Target Type</th>
-                  <th className="py-3 pr-3">Target ID</th>
-                  <th className="py-3 pr-3">Detail</th>
-                </tr>
-              </thead>
-              <tbody>
-                {logs.map((row) => {
-                  const expanded = expandedId === row.id;
-                  return (
-                    <React.Fragment key={row.id}>
-                      <tr className="border-b border-slate-100 align-top">
-                        <td className="py-3 pr-3 whitespace-nowrap text-slate-700">{formatDateTime(row.created_at)}</td>
-                        <td className="py-3 pr-3">
-                          <div className="font-medium text-slate-900">{row.actor_email || "-"}</div>
-                          <div className="text-xs text-slate-500 break-all">{row.actor_user_id || "-"}</div>
-                        </td>
-                        <td className="py-3 pr-3">
-                          <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-semibold text-slate-700">
-                            {row.action}
-                          </span>
-                        </td>
-                        <td className="py-3 pr-3 text-slate-700">{row.target_type || "-"}</td>
-                        <td className="py-3 pr-3 text-slate-700 break-all">{row.target_id || "-"}</td>
-                        <td className="py-3 pr-3">
-                          <button
-                            type="button"
-                            className="text-blue-600 underline"
-                            onClick={() => setExpandedId(expanded ? null : row.id)}
-                          >
-                            {expanded ? "닫기" : "보기"}
-                          </button>
-                        </td>
-                      </tr>
-
-                      {expanded ? (
-                        <tr className="border-b border-slate-100 bg-slate-50">
-                          <td colSpan={6} className="p-4">
-                            <pre className="text-xs whitespace-pre-wrap break-words">{jsonText(row.detail)}</pre>
+          <div className="space-y-4">
+            <div className="overflow-x-auto overflow-y-visible">
+              <table className="w-full min-w-[960px] text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 text-center text-black">
+                    <th className="py-2 pr-3 font-bold">일시</th>
+                    <th className="py-2 pr-3 font-bold">행위자</th>
+                    <th className="py-2 pr-3 font-bold">Action</th>
+                    <th className="py-2 pr-3 font-bold">Target Type</th>
+                    <th className="py-2 pr-3 font-bold">Target ID</th>
+                    <th className="py-2 pr-3 font-bold">Detail</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pagedLogs.map((row) => {
+                    const expanded = expandedId === row.id;
+                    return (
+                      <React.Fragment key={row.id}>
+                        <tr className="border-b border-slate-100 align-top">
+                          <td className="py-2 pr-3 whitespace-nowrap text-center text-slate-700">{formatDateTime(row.created_at)}</td>
+                          <td className="py-2 pr-3">
+                            <div className="font-medium text-slate-900">{row.actor_email || "-"}</div>
+                            <div className="text-xs text-slate-500 break-all">{row.actor_user_id || "-"}</div>
+                          </td>
+                          <td className="py-2 pr-3 text-center">
+                            <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-semibold text-slate-700">
+                              {row.action}
+                            </span>
+                          </td>
+                          <td className="py-2 pr-3 text-center text-slate-700">{row.target_type || "-"}</td>
+                          <td className="py-2 pr-3 text-center text-slate-700 break-all">{row.target_id || "-"}</td>
+                          <td className="py-2 pr-3 text-center">
+                            <button
+                              type="button"
+                              className="text-blue-600 underline"
+                              onClick={() => setExpandedId(expanded ? null : row.id)}
+                            >
+                              {expanded ? "닫기" : "보기"}
+                            </button>
                           </td>
                         </tr>
-                      ) : null}
-                    </React.Fragment>
+
+                        {expanded ? (
+                          <tr className="border-b border-slate-100 bg-slate-50">
+                            <td colSpan={6} className="p-4">
+                              <pre className="text-xs whitespace-pre-wrap break-words">{jsonText(row.detail)}</pre>
+                            </td>
+                          </tr>
+                        ) : null}
+                      </React.Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {logs.length > PAGE_SIZE ? (
+              <div className="flex items-center justify-center gap-2 flex-wrap">
+                {Array.from({ length: totalPages }, (_, idx) => idx + 1).map((pageNumber) => {
+                  const active = pageNumber === page;
+                  return (
+                    <button
+                      key={pageNumber}
+                      type="button"
+                      onClick={() => {
+                        setPage(pageNumber);
+                        setExpandedId(null);
+                      }}
+                      className={[
+                        "h-9 min-w-[36px] px-3 rounded-xl border text-sm font-semibold",
+                        active
+                          ? "bg-slate-900 text-white border-slate-900"
+                          : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50",
+                      ].join(" ")}
+                    >
+                      {pageNumber}
+                    </button>
                   );
                 })}
-              </tbody>
-            </table>
+              </div>
+            ) : null}
           </div>
         )}
       </div>
