@@ -258,12 +258,20 @@ export default function VulnIdentifyPanel({ checklistItems = [], onUpdated }) {
   const [page, setPage] = useState(1);
   const [savingCode, setSavingCode] = useState(null);
 
-  const totalCount = useMemo(() => (checklistItems || []).length, [checklistItems]);
-  const vulnDoneCount = useMemo(() => (checklistItems || []).filter(isVulnCompleted).length, [checklistItems]);
+  const progressRows = useMemo(() => {
+    return (checklistItems || []).filter((x) => {
+      const t = normalizeType(x.type);
+      if (typeFilter !== TYPE_ALL && t !== typeFilter) return false;
+      return true;
+    });
+  }, [checklistItems, typeFilter]);
+
+  const totalCount = useMemo(() => progressRows.length, [progressRows]);
+  const vulnDoneCount = useMemo(() => progressRows.filter(isVulnCompleted).length, [progressRows]);
 
   const statusDoneCount = useMemo(() => {
-    return (checklistItems || []).filter(isStatusCompleted).length;
-  }, [checklistItems]);
+    return progressRows.filter(isStatusCompleted).length;
+  }, [progressRows]);
 
   const allStatusCompleted = totalCount > 0 && totalCount === statusDoneCount;
   const blockMessage = getVulnBlockMessage(totalCount, statusDoneCount);

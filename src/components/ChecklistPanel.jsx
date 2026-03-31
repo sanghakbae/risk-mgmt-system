@@ -174,6 +174,14 @@ export default function ChecklistPanel({
     });
   }, [rows, typeFilter, areaFilter, domainFilter, keyword]);
 
+  const progressRows = useMemo(() => {
+    return rows.filter((x) => {
+      const t = normalizeType(x.type);
+      if (typeFilter !== "전체" && t !== typeFilter) return false;
+      return true;
+    });
+  }, [rows, typeFilter]);
+
   // ✅ 필터 변경 시 1페이지로
   useEffect(() => {
     setPage(1);
@@ -195,7 +203,10 @@ export default function ChecklistPanel({
     return filteredRows.slice(start, start + PAGE_SIZE);
   }, [filteredRows, pageSafe]);
 
-  const checklistDoneCount = useMemo(() => rows.filter(isChecklistDefined).length, [rows]);
+  const checklistDoneCount = useMemo(
+    () => progressRows.filter(isChecklistDefined).length,
+    [progressRows]
+  );
 
   // ✅ 페이지 번호 최대 10개(슬라이딩)
   const maxPageButtons = 10;
@@ -394,7 +405,11 @@ export default function ChecklistPanel({
     <div className="panel-shell flex flex-col gap-4 w-full max-w-none">
       <div className="panel-sticky">
         <div className="panel-header-stack">
-          <TopProgressBar title="Checklist 작성 진행률" done={checklistDoneCount} total={rows.length} />
+          <TopProgressBar
+            title="Checklist 작성 진행률"
+            done={checklistDoneCount}
+            total={progressRows.length}
+          />
 
           <div className="panel-filter-card rounded-lg border border-slate-200 bg-white p-3">
             <div className="flex items-center gap-2 flex-wrap">

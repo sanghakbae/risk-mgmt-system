@@ -248,6 +248,14 @@ export default function StatusWritePanel({ checklistItems = [], onUpdated }) {
     });
   }, [rows, typeFilter, areaFilter, domainFilter, statusFilter, keyword]);
 
+  const progressRows = useMemo(() => {
+    return rows.filter((x) => {
+      const t = normalizeType(x.type);
+      if (typeFilter !== "전체" && t !== typeFilter) return false;
+      return true;
+    });
+  }, [rows, typeFilter]);
+
   const totalPages = useMemo(() => {
     const n = Math.ceil(filteredRows.length / pageSize);
     return n <= 0 ? 1 : n;
@@ -268,7 +276,10 @@ export default function StatusWritePanel({ checklistItems = [], onUpdated }) {
     return filteredRows.slice(start, start + pageSize);
   }, [filteredRows, pageSafe]);
 
-  const statusDoneCount = useMemo(() => rows.filter(isStatusCompleted).length, [rows]);
+  const statusDoneCount = useMemo(
+    () => progressRows.filter(isStatusCompleted).length,
+    [progressRows]
+  );
 
   // ✅ 페이지 버튼(최대 10개)
   const maxPageButtons = 10;
@@ -402,7 +413,11 @@ export default function StatusWritePanel({ checklistItems = [], onUpdated }) {
     <div className="panel-shell flex flex-col gap-4 w-full max-w-none">
       <div className="panel-sticky">
         <div className="mb-4">
-          <TopProgressBar title="Status 작성 진행률" done={statusDoneCount} total={rows.length} />
+          <TopProgressBar
+            title="Status 작성 진행률"
+            done={statusDoneCount}
+            total={progressRows.length}
+          />
         </div>
 
         <div className="panel-filter-card rounded-2xl border border-slate-200 bg-white p-4">

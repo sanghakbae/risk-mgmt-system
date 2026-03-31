@@ -277,7 +277,7 @@ function Sidebar({ collapsed, activeKey, onSelect, onToggle, role, stepStates = 
     <div
       className={[
         "hidden md:block h-screen sticky top-0 border-r border-slate-200 bg-white transition-all",
-        collapsed ? "w-[76px]" : "w-[284px]",
+        collapsed ? "w-[80px]" : "w-[320px]",
       ].join(" ")}
     >
       <div className="h-full flex flex-col">
@@ -305,9 +305,9 @@ function Sidebar({ collapsed, activeKey, onSelect, onToggle, role, stepStates = 
           </button>
         </div>
 
-        <div className={collapsed ? "px-1 py-3 flex-1 overflow-auto" : "px-2 py-3 flex-1 overflow-auto"}>
+        <div className={collapsed ? "px-1 py-3 flex-1 overflow-auto" : "px-4 py-5 flex-1 overflow-auto"}>
           <div className="space-y-4">
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               {workflowSteps.map((s) => {
                 const active = s.key === activeKey;
                 const isAdminItem = isAdminMenuKey(s.key);
@@ -331,7 +331,7 @@ function Sidebar({ collapsed, activeKey, onSelect, onToggle, role, stepStates = 
                       onClick={() => handleSelect(s)}
                       className={[
                         "w-full flex items-center rounded-xl border transition-colors",
-                        collapsed ? "justify-center px-1 py-3" : "gap-3 pl-4 pr-3 py-3",
+                        collapsed ? "justify-center px-1 py-3.5" : "gap-3 pl-5 pr-4 py-4",
                         locked
                           ? active
                             ? "bg-rose-100 text-slate-900 border-rose-300 border-dashed"
@@ -359,7 +359,7 @@ function Sidebar({ collapsed, activeKey, onSelect, onToggle, role, stepStates = 
 
                       {!collapsed ? (
                         <div className="min-w-0 text-left flex-1">
-                          <div className="text-[15px] font-semibold leading-tight truncate flex items-center gap-1.5">
+                          <div className="text-[17px] font-extrabold leading-tight truncate flex items-center gap-1.5">
                             <span>{s.sidebarTitle ?? s.title}</span>
                             {locked ? <Lock className="w-3.5 h-3.5 shrink-0" /> : null}
                             {locked ? (
@@ -368,14 +368,11 @@ function Sidebar({ collapsed, activeKey, onSelect, onToggle, role, stepStates = 
                               </span>
                             ) : null}
                           </div>
-                          <div
-                            className={[
-                              "mt-1 text-[13px] leading-snug truncate",
-                              locked ? "text-rose-700" : active ? "text-slate-700" : "text-black",
-                            ].join(" ")}
-                          >
-                            {locked ? lockLabel : s.sidebarDesc ?? s.desc}
-                          </div>
+                          {locked ? (
+                            <div className="mt-1 text-[12px] font-semibold leading-[1.35] text-rose-700 truncate">
+                              {lockLabel}
+                            </div>
+                          ) : null}
                         </div>
                       ) : null}
                     </button>
@@ -390,11 +387,11 @@ function Sidebar({ collapsed, activeKey, onSelect, onToggle, role, stepStates = 
               })}
             </div>
 
-            <div className={collapsed ? "space-y-1" : "rounded-2xl border border-slate-200 bg-slate-50/80 p-2 space-y-1"}>
+            <div className={collapsed ? "space-y-1.5" : "rounded-2xl border border-slate-300 bg-slate-50 p-3.5 space-y-1.5"}>
               {!collapsed ? (
-                <div className="px-2 pt-1 pb-2">
-                  <div className="text-[11px] font-bold tracking-[0.14em] text-slate-500">REPORT & ADMIN</div>
-                  <div className="mt-1 text-[12px] text-slate-600">보고서 및 운영 설정</div>
+                <div className="px-2 pt-1 pb-2.5">
+                  <div className="text-[13px] font-extrabold tracking-[0.12em] text-slate-800">REPORT & ADMIN</div>
+                  <div className="mt-1 text-[12px] font-medium text-slate-700">보고서 및 운영 설정</div>
                 </div>
               ) : null}
               {groupedSteps.map((s) => {
@@ -421,7 +418,7 @@ function Sidebar({ collapsed, activeKey, onSelect, onToggle, role, stepStates = 
                     onClick={() => handleSelect(s)}
                       className={[
                       "w-full flex items-center rounded-xl border transition-colors",
-                      collapsed ? "justify-center px-1 py-3" : "gap-3 pl-4 pr-3 py-3",
+                      collapsed ? "justify-center px-1 py-3.5" : "gap-3 pl-5 pr-4 py-4",
                       isReportLead
                         ? active
                           ? "bg-slate-100 text-slate-900 border-slate-300 shadow-sm"
@@ -457,7 +454,7 @@ function Sidebar({ collapsed, activeKey, onSelect, onToggle, role, stepStates = 
 
                     {!collapsed ? (
                       <div className="min-w-0 text-left flex-1">
-                          <div className="text-[15px] font-semibold leading-tight truncate flex items-center gap-1.5">
+                          <div className="text-[17px] font-extrabold leading-tight truncate flex items-center gap-1.5">
                             <span>{s.sidebarTitle ?? s.title}</span>
                             {!isReportLead && locked ? <Lock className="w-3.5 h-3.5 shrink-0" /> : null}
                             {!isReportLead && locked ? (
@@ -466,20 +463,11 @@ function Sidebar({ collapsed, activeKey, onSelect, onToggle, role, stepStates = 
                               </span>
                           ) : null}
                         </div>
-                          <div
-                            className={[
-                              "mt-1 text-[13px] leading-snug truncate",
-                              isReportLead
-                                ? "text-slate-600"
-                                : locked
-                                  ? "text-rose-700"
-                                  : active
-                                    ? "text-slate-700"
-                                    : "text-black",
-                            ].join(" ")}
-                          >
-                          {isReportLead ? "승인/보고서" : locked ? lockLabel : s.sidebarDesc ?? s.desc}
-                        </div>
+                          {isReportLead ? (
+                            <div className="mt-1 text-[12px] font-semibold text-slate-700 truncate">승인/보고서</div>
+                          ) : locked ? (
+                            <div className="mt-1 text-[12px] font-semibold text-rose-700 truncate">{lockLabel}</div>
+                          ) : null}
                       </div>
                     ) : null}
                   </button>
