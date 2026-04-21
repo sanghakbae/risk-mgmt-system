@@ -71,7 +71,7 @@ function badgeClassFromRisk(n) {
   if (n == null) return "bg-slate-100 text-slate-700 border-slate-200";
   if (n <= 3) return "bg-rose-50 text-rose-700 border-rose-200";
   if (n <= 6) return "bg-amber-50 text-amber-800 border-amber-200";
-  return "bg-blue-50 text-blue-700 border-blue-200";
+  return "bg-slate-50 text-slate-700 border-slate-200";
 }
 
 function progressBarClass(pct) {
@@ -103,7 +103,7 @@ function treatmentBadge(strategy) {
   const s = safeStr(strategy).trim() || "수용";
   if (s === "감소") return { text: "감소", cls: "bg-amber-50 text-amber-800 border-amber-200" };
   if (s === "회피") return { text: "회피", cls: "bg-rose-50 text-rose-700 border-rose-200" };
-  if (s === "전가") return { text: "전가", cls: "bg-blue-50 text-blue-700 border-blue-200" };
+  if (s === "전가") return { text: "전가", cls: "bg-slate-50 text-slate-700 border-slate-200" };
   return { text: "수용", cls: "bg-emerald-50 text-emerald-700 border-emerald-200" };
 }
 
@@ -149,9 +149,9 @@ function StrategyGuide() {
           </ul>
         </div>
 
-        <div className="rounded-xl border border-blue-200 bg-blue-50 p-3">
-          <div className="text-sm font-semibold text-blue-900">전가 (Transfer)</div>
-          <ul className="text-xs text-blue-900 mt-1 space-y-1 list-disc pl-4">
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+          <div className="text-sm font-semibold text-slate-900">전가 (Transfer)</div>
+          <ul className="text-xs text-slate-700 mt-1 space-y-1 list-disc pl-4">
             <li>위험을 제3자에게 이전</li>
             <li>책임은 계약으로 관리</li>
             <li>예: 외주 운영, 보안관제, 보험</li>
@@ -177,7 +177,7 @@ function StatPill({ label, value, tone = "slate" }) {
     rose: "bg-rose-50 border-rose-200 text-rose-800",
     amber: "bg-amber-50 border-amber-200 text-amber-900",
     emerald: "bg-emerald-50 border-emerald-200 text-emerald-900",
-    blue: "bg-blue-50 border-blue-200 text-blue-900",
+    blue: "bg-slate-50 border-slate-200 text-slate-900",
   };
 
   return (

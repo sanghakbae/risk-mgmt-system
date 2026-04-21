@@ -300,7 +300,7 @@ Supabase
 Authentication → Redirect URL
 
 ```
-https://your-domain
+https://rms.sanghak.kr
 ```
 
 ---

@@ -110,7 +110,7 @@ function badgeClassFromRisk(n, policy) {
   if (n == null) return "bg-slate-50 text-slate-600 border-slate-200";
   if (n <= highMax) return "bg-rose-50 text-rose-700 border-rose-200";
   if (n <= mediumMax) return "bg-amber-50 text-amber-800 border-amber-200";
-  return "bg-blue-50 text-blue-700 border-blue-200";
+  return "bg-slate-50 text-slate-700 border-slate-200";
 }
 
 const L_LABEL = { 1: "Unlikely", 2: "Likely", 3: "Highly Likely" };
@@ -178,12 +178,12 @@ function RiskCard({ row, draft, onChangeDraft, onSave, saving, editable, blockMe
       </div>
 
       {guideText ? (
-        <div className="rounded-2xl border border-sky-200 bg-sky-50 px-3 py-2">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
           <div className="mb-1 flex items-center gap-2">
-            <span className="inline-block h-3 w-3 rounded-sm border border-sky-400 bg-sky-300" />
-            <span className="text-sm font-semibold text-sky-800">가이드</span>
+            <span className="inline-block h-3 w-3 rounded-sm border border-slate-400 bg-slate-300" />
+            <span className="text-sm font-semibold text-slate-800">가이드</span>
           </div>
-          <div className="text-sm text-sky-800 whitespace-pre-wrap break-words">{guideText}</div>
+          <div className="text-sm text-slate-800 whitespace-pre-wrap break-words">{guideText}</div>
         </div>
       ) : null}
 

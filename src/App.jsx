@@ -211,6 +211,10 @@ function getStoredActiveStep() {
   }
 }
 
+function getPortalEmbeddedState(embeddedContext) {
+  return Boolean(embeddedContext?.embedded);
+}
+
 function setStoredActiveStep(step) {
   try {
     sessionStorage.setItem(ACTIVE_STEP_STORAGE_KEY, String(step || "dashboard"));
@@ -605,10 +609,20 @@ function AdminBlockedPanel() {
   );
 }
 
-export default function App() {
-  const [session, setSession] = useState(null);
-  const [authLoading, setAuthLoading] = useState(true);
-  const [role, setRole] = useState("viewer");
+export default function App({ embeddedContext } = {}) {
+  const isPortalEmbedded = getPortalEmbeddedState(embeddedContext);
+  const [session, setSession] = useState(
+    isPortalEmbedded
+      ? {
+          user: {
+            id: "portal-guest",
+            email: "portal@local",
+          },
+        }
+      : null,
+  );
+  const [authLoading, setAuthLoading] = useState(!isPortalEmbedded);
+  const [role, setRole] = useState(isPortalEmbedded ? "admin" : "viewer");
   const [sessionTimeoutMinutes, setSessionTimeoutMinutes] = useState(DEFAULT_SESSION_TIMEOUT_MINUTES);
   const [clockNow, setClockNow] = useState(() => Date.now());
 
@@ -871,6 +885,18 @@ export default function App() {
   );
 
   useEffect(() => {
+    if (isPortalEmbedded) {
+      setAuthLoading(false);
+      setSession({
+        user: {
+          id: "portal-guest",
+          email: "portal@local",
+        },
+      });
+      setRole("admin");
+      return;
+    }
+
     let mounted = true;
 
     async function bootstrap() {
@@ -1012,6 +1038,7 @@ export default function App() {
     loadAllowedDomains,
     loadRoleAndProfile,
     loadSessionTimeoutMinutes,
+    isPortalEmbedded,
   ]);
 
   useEffect(() => {
