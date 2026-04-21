@@ -1216,7 +1216,7 @@ export default function App({ embeddedContext } = {}) {
               right={topRight}
             />
 
-            <div className="pt-3 md:pt-6 pb-24 md:pb-10">
+            <div className="pt-1.5 md:pt-3 pb-24 md:pb-10">
               {activeStep === "dashboard" && <DashboardPanel checklistItems={checklistItems} />}
 
               {activeStep === "checklist" && (

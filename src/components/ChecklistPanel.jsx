@@ -24,6 +24,13 @@ function clamp(n, min, max) {
   return Math.max(min, Math.min(max, n));
 }
 
+function riskNumber(l, i) {
+  const likelihood = Number(l);
+  const impact = Number(i);
+  if (!Number.isFinite(likelihood) || !Number.isFinite(impact)) return null;
+  return likelihood * impact;
+}
+
 function formatFileTimestamp(date = new Date()) {
   const pad = (n) => String(n).padStart(2, "0");
   return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}_${pad(
@@ -314,6 +321,10 @@ export default function ChecklistPanel({
     const toInt = (v) => (v == null ? null : Number.isFinite(Number(v)) ? parseInt(v, 10) : null);
     for (const key of ["cost", "risk", "impact", "likelihood", "residual_impact", "residual_likelihood"]) {
       if (key in out) out[key] = toInt(out[key]);
+    }
+
+    if (out.likelihood != null && out.impact != null) {
+      out.risk = riskNumber(out.likelihood, out.impact);
     }
 
     if (out.type != null) out.type = normalizeType(out.type);

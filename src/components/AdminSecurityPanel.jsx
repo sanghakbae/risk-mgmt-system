@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import Button from "../ui/Button";
 import { fetchSecuritySettings, upsertSecuritySetting, writeAuditLog } from "../api/admin";
+import { ACCEPTANCE_THRESHOLD_OPTIONS } from "../utils/riskPolicy";
 
 const DEFAULT_ALLOWED_DOMAINS = ["muhayu.com"];
 const DEFAULT_SESSION_TIMEOUT_MINUTES = 60;
@@ -46,43 +47,52 @@ function normalizePositiveInteger(value) {
   return n;
 }
 
+function normalizeAcceptanceThreshold(value) {
+  const n = parseNumber(value, DEFAULT_DOA_THRESHOLD);
+  return ACCEPTANCE_THRESHOLD_OPTIONS.includes(n) ? n : DEFAULT_DOA_THRESHOLD;
+}
+
 function normalizeRiskPolicyValue(value) {
   const raw = value ?? {};
 
-  if (Number.isFinite(Number(raw?.doa_threshold))) {
+  if (Number.isFinite(Number(raw?.doa_threshold)) || Number.isFinite(Number(raw?.arl_threshold))) {
     const normalized = {
-      doa_threshold: parseNumber(raw.doa_threshold, DEFAULT_DOA_THRESHOLD),
+      doa_threshold: normalizeAcceptanceThreshold(raw.doa_threshold ?? raw.arl_threshold),
     };
     return {
       ISMS: normalized,
-      ISO27001: normalized,
+      ISO27001: { arl_threshold: normalized.doa_threshold },
     };
   }
 
   if (Number.isFinite(Number(raw?.high_max)) && Number.isFinite(Number(raw?.medium_max))) {
     const normalized = {
-      doa_threshold: parseNumber(raw.medium_max, DEFAULT_DOA_THRESHOLD),
+      doa_threshold: normalizeAcceptanceThreshold(raw.medium_max),
     };
     return {
       ISMS: normalized,
-      ISO27001: normalized,
+      ISO27001: { arl_threshold: normalized.doa_threshold },
     };
   }
 
   return {
     ISMS: {
-      doa_threshold: parseNumber(
+      doa_threshold: normalizeAcceptanceThreshold(
         raw?.ISMS?.doa_threshold ?? raw?.ISMS?.medium_max,
-        DEFAULT_DOA_THRESHOLD
       ),
     },
     ISO27001: {
-      doa_threshold: parseNumber(
-        raw?.ISO27001?.doa_threshold ?? raw?.ISO27001?.medium_max,
-        DEFAULT_DOA_THRESHOLD
+      arl_threshold: normalizeAcceptanceThreshold(
+        raw?.ISO27001?.arl_threshold ?? raw?.ISO27001?.doa_threshold ?? raw?.ISO27001?.medium_max,
       ),
     },
   };
+}
+
+function riskAcceptanceMetricForStandard(standard) {
+  return standard === "ISO27001"
+    ? { key: "arl_threshold", label: "ARL", name: "Acceptable Risk Level" }
+    : { key: "doa_threshold", label: "DoA", name: "Degree of Assurance" };
 }
 
 export default function AdminSecurityPanel({ session, reloadKey, onChanged, canManage = false }) {
@@ -142,7 +152,7 @@ export default function AdminSecurityPanel({ session, reloadKey, onChanged, canM
         );
         const nextPolicy = normalizeRiskPolicyValue(byKey.risk_evaluation_policy?.value);
         setRiskPolicyByStandard(nextPolicy);
-        setDoaThreshold(parseNumber(nextPolicy.ISMS?.doa_threshold, DEFAULT_DOA_THRESHOLD));
+        setDoaThreshold(normalizeAcceptanceThreshold(nextPolicy.ISMS?.doa_threshold));
       } catch (e) {
         if (!mounted) return;
         console.error(e);
@@ -160,7 +170,8 @@ export default function AdminSecurityPanel({ session, reloadKey, onChanged, canM
 
   useEffect(() => {
     const current = riskPolicyByStandard[selectedStandard] ?? {};
-    setDoaThreshold(parseNumber(current.doa_threshold, DEFAULT_DOA_THRESHOLD));
+    const metric = riskAcceptanceMetricForStandard(selectedStandard);
+    setDoaThreshold(normalizeAcceptanceThreshold(current[metric.key] ?? current.doa_threshold));
   }, [selectedStandard, riskPolicyByStandard]);
 
   async function saveSetting(key, value, description) {
@@ -266,14 +277,20 @@ export default function AdminSecurityPanel({ session, reloadKey, onChanged, canM
 
   async function handleSaveRiskEvaluationPolicy() {
     const threshold = normalizePositiveInteger(doaThreshold);
+    const metric = riskAcceptanceMetricForStandard(selectedStandard);
 
     if (!Number.isFinite(threshold)) {
-      alert("DoA 기준값은 정수로 입력해야 합니다.");
+      alert(`${metric.label} 기준값은 정수로 입력해야 합니다.`);
       return;
     }
 
     if (threshold < 1) {
-      alert("DoA 기준값은 1 이상이어야 합니다.");
+      alert(`${metric.label} 기준값은 1 이상이어야 합니다.`);
+      return;
+    }
+
+    if (!ACCEPTANCE_THRESHOLD_OPTIONS.includes(threshold)) {
+      alert(`${metric.label} 기준값은 ${ACCEPTANCE_THRESHOLD_OPTIONS.join(", ")} 중 하나를 선택해야 합니다.`);
       return;
     }
 
@@ -281,13 +298,17 @@ export default function AdminSecurityPanel({ session, reloadKey, onChanged, canM
       "risk_evaluation_policy",
       {
         ...riskPolicyByStandard,
-        [selectedStandard]: { doa_threshold: threshold },
+        [selectedStandard]: {
+          [metric.key]: threshold,
+        },
       },
-      "DoA 등급 기준"
+      "리스크 허용 기준"
     );
     setRiskPolicyByStandard((prev) => ({
       ...prev,
-      [selectedStandard]: { doa_threshold: threshold },
+      [selectedStandard]: {
+        [metric.key]: threshold,
+      },
     }));
   }
 
@@ -395,9 +416,11 @@ export default function AdminSecurityPanel({ session, reloadKey, onChanged, canM
         </div>
 
         <div className={cardClass()}>
-          <div className="text-sm font-semibold text-slate-900">DoA 기준</div>
+          <div className="text-sm font-semibold text-slate-900">
+            {riskAcceptanceMetricForStandard(selectedStandard).label} 기준
+          </div>
           <div className="text-xs text-slate-500 mt-1">
-            표준을 선택하면 해당 DoA 기준값 1개만 표시하고 저장합니다.
+            표준을 선택하면 해당 리스크 허용 기준값 1개만 표시하고 저장합니다.
           </div>
 
           <div className="mt-4">
@@ -416,20 +439,22 @@ export default function AdminSecurityPanel({ session, reloadKey, onChanged, canM
           </div>
 
           <div className="mt-3">
-            <input
-              type="number"
-              min="1"
-              step="1"
+            <select
               className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-slate-400"
               value={doaThreshold}
               onChange={(e) => setDoaThreshold(e.target.value)}
               disabled={!canManage}
-              placeholder="DoA 기준값"
-            />
+            >
+              {ACCEPTANCE_THRESHOLD_OPTIONS.map((threshold) => (
+                <option key={threshold} value={threshold}>
+                  Risk {threshold}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="mt-2 text-xs text-slate-500">
-            {selectedStandard} 기준 예: Risk {doaThreshold || DEFAULT_DOA_THRESHOLD} 이하는 허용, 그 초과는 조치 필요
+            {selectedStandard} {riskAcceptanceMetricForStandard(selectedStandard).label} 기준 예: Risk {doaThreshold || DEFAULT_DOA_THRESHOLD} 이하는 허용 가능, 그 초과는 조치 필요
           </div>
 
           <div className="mt-4">

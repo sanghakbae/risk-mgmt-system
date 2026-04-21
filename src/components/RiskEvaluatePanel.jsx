@@ -5,14 +5,18 @@ import EvidenceModalTrigger from "./EvidenceModalTrigger";
 import TopProgressBar from "./TopProgressBar";
 import { parseEvidenceUrls } from "../utils/evidence";
 import { fetchRiskEvaluationPolicy } from "../api/admin";
+import {
+  DEFAULT_RISK_HIGH_MIN,
+  DEFAULT_RISK_MEDIUM_MIN,
+  getRiskPolicyForType,
+  normalizeRiskPolicyValue,
+} from "../utils/riskPolicy";
 
 const PAGE_SIZE = 5;
 
 const TYPE_ALL = "전체";
 const TYPE_ISMS = "ISMS";
 const TYPE_ISO = "ISO27001";
-const DEFAULT_RISK_HIGH_MAX = 3;
-const DEFAULT_RISK_MEDIUM_MAX = 6;
 
 function safeStr(v) {
   return v == null ? "" : String(v);
@@ -79,37 +83,28 @@ function getRiskBlockMessage(totalCount, doneCount) {
   return "취약 식별 단계 전체 완료 후 위험도 산정을 수정할 수 있습니다.";
 }
 
-// 회사 정책 Risk Matrix
 function riskNumber(l, i) {
-  const map = {
-    "3-1": 6,
-    "3-2": 3,
-    "3-3": 1,
-    "2-1": 8,
-    "2-2": 5,
-    "2-3": 2,
-    "1-1": 9,
-    "1-2": 7,
-    "1-3": 4,
-  };
-  return map[`${l}-${i}`] ?? null;
+  const likelihood = Number(l);
+  const impact = Number(i);
+  if (!Number.isFinite(likelihood) || !Number.isFinite(impact)) return null;
+  return likelihood * impact;
 }
 
 function riskLabelFromNumber(n, policy) {
-  const highMax = Number(policy?.highMax ?? DEFAULT_RISK_HIGH_MAX);
-  const mediumMax = Number(policy?.mediumMax ?? DEFAULT_RISK_MEDIUM_MAX);
+  const highMin = Number(policy?.highMin ?? DEFAULT_RISK_HIGH_MIN);
+  const mediumMin = Number(policy?.mediumMin ?? DEFAULT_RISK_MEDIUM_MIN);
   if (n == null) return "Risk -";
-  if (n <= highMax) return `Risk ${n} · High`;
-  if (n <= mediumMax) return `Risk ${n} · Medium`;
+  if (n >= highMin) return `Risk ${n} · High`;
+  if (n >= mediumMin) return `Risk ${n} · Medium`;
   return `Risk ${n} · Low`;
 }
 
 function badgeClassFromRisk(n, policy) {
-  const highMax = Number(policy?.highMax ?? DEFAULT_RISK_HIGH_MAX);
-  const mediumMax = Number(policy?.mediumMax ?? DEFAULT_RISK_MEDIUM_MAX);
+  const highMin = Number(policy?.highMin ?? DEFAULT_RISK_HIGH_MIN);
+  const mediumMin = Number(policy?.mediumMin ?? DEFAULT_RISK_MEDIUM_MIN);
   if (n == null) return "bg-slate-50 text-slate-600 border-slate-200";
-  if (n <= highMax) return "bg-rose-50 text-rose-700 border-rose-200";
-  if (n <= mediumMax) return "bg-amber-50 text-amber-800 border-amber-200";
+  if (n >= highMin) return "bg-rose-50 text-rose-700 border-rose-200";
+  if (n >= mediumMin) return "bg-amber-50 text-amber-800 border-amber-200";
   return "bg-slate-50 text-slate-700 border-slate-200";
 }
 
@@ -302,10 +297,10 @@ export default function RiskEvaluatePanel({ checklistItems = [], onUpdated }) {
 
   const [page, setPage] = useState(1);
   const [savingCode, setSavingCode] = useState(null);
-  const [riskPolicy, setRiskPolicy] = useState({
-    highMax: DEFAULT_RISK_HIGH_MAX,
-    mediumMax: DEFAULT_RISK_MEDIUM_MAX,
-  });
+  const [syncingRisk, setSyncingRisk] = useState(false);
+  const [riskPolicyByStandard, setRiskPolicyByStandard] = useState(() =>
+    normalizeRiskPolicyValue(null)
+  );
 
   useEffect(() => {
     let mounted = true;
@@ -315,12 +310,7 @@ export default function RiskEvaluatePanel({ checklistItems = [], onUpdated }) {
         const value = await fetchRiskEvaluationPolicy();
         if (!mounted) return;
 
-        const highMax = Number(value?.high_max);
-        const mediumMax = Number(value?.medium_max);
-
-        if (Number.isFinite(highMax) && Number.isFinite(mediumMax) && highMax < mediumMax) {
-          setRiskPolicy({ highMax, mediumMax });
-        }
+        setRiskPolicyByStandard(normalizeRiskPolicyValue(value));
       } catch (e) {
         console.error("risk evaluation policy load error:", e);
       }
@@ -337,6 +327,26 @@ export default function RiskEvaluatePanel({ checklistItems = [], onUpdated }) {
     () => rows.filter((x) => isVulnerable(x) && isRiskEvaluated(x)).length,
     [rows]
   );
+  const riskMismatchRows = useMemo(() => {
+    return rows
+      .map((row) => {
+        const l = row.likelihood == null || row.likelihood === "" ? null : Number(row.likelihood);
+        const i = row.impact == null || row.impact === "" ? null : Number(row.impact);
+        const expectedRisk = l && i ? riskNumber(l, i) : null;
+        const storedRisk = row.risk == null || row.risk === "" ? null : Number(row.risk);
+
+        return {
+          row,
+          expectedRisk,
+          storedRisk,
+        };
+      })
+      .filter(({ row, expectedRisk, storedRisk }) => {
+        if (!isVulnerable(row)) return false;
+        if (expectedRisk == null) return false;
+        return storedRisk !== expectedRisk;
+      });
+  }, [rows]);
 
   const vulnDoneCount = useMemo(() => {
     return rows.filter(isVulnIdentified).length;
@@ -521,9 +531,44 @@ export default function RiskEvaluatePanel({ checklistItems = [], onUpdated }) {
     }
   }
 
+  async function handleSyncRiskValues() {
+    if (riskMismatchRows.length === 0) return;
+
+    try {
+      setSyncingRisk(true);
+
+      for (const { row, expectedRisk } of riskMismatchRows) {
+        await updateChecklistByCode(safeStr(row.code), { risk: expectedRisk });
+      }
+
+      onUpdated?.();
+      alert(`Risk 값 ${riskMismatchRows.length}건을 재계산했습니다.`);
+    } catch (e) {
+      alert("Risk 재계산 실패: " + (e?.message || "unknown"));
+    } finally {
+      setSyncingRisk(false);
+    }
+  }
+
   return (
     <div className="panel-shell flex flex-col gap-4 w-full max-w-none">
       <div className="panel-sticky">
+        {riskMismatchRows.length > 0 ? (
+          <div className="panel-banner mb-4 rounded-2xl border border-amber-200 bg-amber-50">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div>
+                <div className="panel-banner-title text-amber-800">Risk 값 재계산 필요</div>
+                <div className="panel-banner-body text-amber-800">
+                  저장된 Risk 값 {riskMismatchRows.length}건이 Impact × Likelihood 기준과 다릅니다.
+                </div>
+              </div>
+              <Button onClick={handleSyncRiskValues} disabled={syncingRisk}>
+                {syncingRisk ? "재계산 중..." : "Risk 재계산"}
+              </Button>
+            </div>
+          </div>
+        ) : null}
+
         {!allVulnCompleted ? (
           <div className="panel-banner mb-4 rounded-2xl border border-rose-200 bg-rose-50">
             <div className="panel-banner-title text-rose-700">단계 잠금</div>
@@ -632,7 +677,7 @@ export default function RiskEvaluatePanel({ checklistItems = [], onUpdated }) {
               saving={savingCode === code}
                 editable={allVulnCompleted}
                 blockMessage={blockMessage}
-                riskPolicy={riskPolicy}
+                riskPolicy={getRiskPolicyForType(riskPolicyByStandard, row.type)}
               />
             );
           })}

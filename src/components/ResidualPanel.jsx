@@ -2,6 +2,14 @@
 import React, { useMemo, useState, useEffect } from "react";
 import Button from "../ui/Button";
 import { updateChecklistByCode } from "../api/checklist";
+import { fetchRiskEvaluationPolicy } from "../api/admin";
+import {
+  DEFAULT_DOA_THRESHOLD,
+  DEFAULT_RISK_HIGH_MIN,
+  DEFAULT_RISK_MEDIUM_MIN,
+  getRiskPolicyForType,
+  normalizeRiskPolicyValue,
+} from "../utils/riskPolicy";
 
 const PAGE_SIZE = 20;
 
@@ -58,34 +66,29 @@ function getResidualBlockMessage(totalCount, statusDoneCount, vulnDoneCount, ris
 const L_LABEL = { 1: "Unlikely", 2: "Likely", 3: "Highly Likely" };
 const I_LABEL = { 1: "Low", 2: "Medium", 3: "High" };
 
-// 회사 정책 Risk Matrix
 function riskNumber(l, i) {
-  const map = {
-    "3-1": 6,
-    "3-2": 3,
-    "3-3": 1,
-    "2-1": 8,
-    "2-2": 5,
-    "2-3": 2,
-    "1-1": 9,
-    "1-2": 7,
-    "1-3": 4,
-  };
-  return map[`${l}-${i}`] ?? null;
+  const likelihood = Number(l);
+  const impact = Number(i);
+  if (!Number.isFinite(likelihood) || !Number.isFinite(impact)) return null;
+  return likelihood * impact;
 }
 
-function riskLabelFromNumber(n) {
+function riskLabelFromNumber(n, policy) {
+  const highMin = Number(policy?.highMin ?? DEFAULT_RISK_HIGH_MIN);
+  const mediumMin = Number(policy?.mediumMin ?? DEFAULT_RISK_MEDIUM_MIN);
   if (n == null) return "-";
-  if (n <= 3) return `Risk ${n} · High`;
-  if (n <= 6) return `Risk ${n} · Medium`;
+  if (n >= highMin) return `Risk ${n} · High`;
+  if (n >= mediumMin) return `Risk ${n} · Medium`;
   return `Risk ${n} · Low`;
 }
 
-function badgeClassFromRisk(n) {
+function badgeClassFromRisk(n, policy) {
+  const highMin = Number(policy?.highMin ?? DEFAULT_RISK_HIGH_MIN);
+  const mediumMin = Number(policy?.mediumMin ?? DEFAULT_RISK_MEDIUM_MIN);
   if (n == null) return "bg-slate-100 text-slate-700 border-slate-200";
-  if (n <= 3) return "bg-rose-50 text-rose-700 border-rose-200";
-  if (n <= 6) return "bg-amber-50 text-amber-800 border-amber-200";
-  return "bg-blue-50 text-blue-700 border-blue-200";
+  if (n >= highMin) return "bg-rose-50 text-rose-700 border-rose-200";
+  if (n >= mediumMin) return "bg-amber-50 text-amber-800 border-amber-200";
+  return "bg-slate-50 text-slate-700 border-slate-200";
 }
 
 function ProgressBar({ done, total, highRisk, mediumRisk, lowRisk }) {
@@ -137,7 +140,7 @@ function ProgressBar({ done, total, highRisk, mediumRisk, lowRisk }) {
   );
 }
 
-function RiskMatrixMini() {
+function RiskMatrixMini({ policy }) {
   const cells = [
     [{ l: 3, i: 1 }, { l: 3, i: 2 }, { l: 3, i: 3 }],
     [{ l: 2, i: 1 }, { l: 2, i: 2 }, { l: 2, i: 3 }],
@@ -145,9 +148,11 @@ function RiskMatrixMini() {
   ];
 
   function cellBg(n) {
-    if (n <= 3) return "bg-rose-100";
-    if (n <= 6) return "bg-amber-100";
-    return "bg-blue-100";
+    const highMin = Number(policy?.highMin ?? DEFAULT_RISK_HIGH_MIN);
+    const mediumMin = Number(policy?.mediumMin ?? DEFAULT_RISK_MEDIUM_MIN);
+    if (n >= highMin) return "bg-rose-100";
+    if (n >= mediumMin) return "bg-amber-100";
+    return "bg-slate-100";
   }
 
   return (
@@ -192,21 +197,26 @@ function RiskMatrixMini() {
         </div>
       </div>
 
-      <div className="mt-3 text-right text-xs text-slate-500">* Likelihood/Impact는 DB에 1~3 정수로 저장됩니다.</div>
+      <div className="mt-3 text-right text-xs text-slate-500">
+        * {policy?.metricLabel ?? "DoA"} 기준 Risk {policy?.acceptanceThreshold ?? policy?.doaThreshold ?? DEFAULT_DOA_THRESHOLD} 이하 허용 가능
+      </div>
     </div>
   );
 }
 
-function HighResidualPriority({ rows }) {
+function HighResidualPriority({ rows, policy }) {
+  const threshold = policy?.acceptanceThreshold ?? policy?.doaThreshold ?? DEFAULT_DOA_THRESHOLD;
+  const metricLabel = policy?.metricLabel ?? "DoA";
+
   return (
     <div className="rounded-2xl border border-rose-200 bg-white p-3">
       <div className="flex items-center justify-between gap-2">
-        <div className="text-sm font-bold text-slate-900">잔여 High 우선 확인</div>
+        <div className="text-sm font-bold text-slate-900">잔여 조치 우선 확인</div>
         <div className="text-xs text-rose-700">{rows.length}건</div>
       </div>
 
       {rows.length === 0 ? (
-        <div className="mt-2 text-xs text-rose-700">현재 잔여 High 항목이 없습니다.</div>
+        <div className="mt-2 text-xs text-rose-700">현재 {metricLabel} 기준 초과 항목이 없습니다.</div>
       ) : (
         <div className="mt-2 space-y-1.5">
           {rows.map((x) => (
@@ -215,7 +225,7 @@ function HighResidualPriority({ rows }) {
                 [{x.code}] {x.itemCode}
               </div>
               <div className="mt-1 text-[11px] text-slate-600">
-                담당: {x.owner || "-"} · 기한: {x.due || "-"} · 잔여 Risk: {x.risk}
+                담당: {x.owner || "-"} · 기한: {x.due || "-"} · 잔여 Risk: {x.risk} · {x.metricLabel ?? metricLabel} {x.acceptanceThreshold ?? threshold}
               </div>
             </div>
           ))}
@@ -225,7 +235,7 @@ function HighResidualPriority({ rows }) {
   );
 }
 
-function ResidualCard({ row, isSaving, onSave, editable, blockMessage }) {
+function ResidualCard({ row, isSaving, onSave, editable, blockMessage, riskPolicy }) {
   const baseRisk = useMemo(() => {
     const lRaw = row.likelihood ?? row.Likelihood ?? row.risk_likelihood ?? null;
     const iRaw = row.impact ?? row.Impact ?? row.risk_impact ?? null;
@@ -284,19 +294,19 @@ function ResidualCard({ row, isSaving, onSave, editable, blockMessage }) {
           <span
             className={[
               "px-3 py-1 rounded-full border text-xs font-semibold",
-              badgeClassFromRisk(baseRisk),
+              badgeClassFromRisk(baseRisk, riskPolicy),
             ].join(" ")}
           >
-            기준 {riskLabelFromNumber(baseRisk)}
+            기준 {riskLabelFromNumber(baseRisk, riskPolicy)}
           </span>
 
           <span
             className={[
               "px-3 py-1 rounded-full border text-xs font-semibold",
-              badgeClassFromRisk(residualRisk),
+              badgeClassFromRisk(residualRisk, riskPolicy),
             ].join(" ")}
           >
-            잔여 {riskLabelFromNumber(residualRisk)}
+            잔여 {riskLabelFromNumber(residualRisk, riskPolicy)}
           </span>
         </div>
       </div>
@@ -377,6 +387,27 @@ export default function ResidualPanel({ checklistItems = [], onUpdated }) {
   const [onlyMitigate, setOnlyMitigate] = useState(false);
   const [page, setPage] = useState(1);
   const [savingCode, setSavingCode] = useState(null);
+  const [riskPolicyByStandard, setRiskPolicyByStandard] = useState(() =>
+    normalizeRiskPolicyValue(null)
+  );
+
+  useEffect(() => {
+    let mounted = true;
+
+    (async () => {
+      try {
+        const value = await fetchRiskEvaluationPolicy();
+        if (!mounted) return;
+        setRiskPolicyByStandard(normalizeRiskPolicyValue(value));
+      } catch (e) {
+        console.error("risk evaluation policy load error:", e);
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const totalCount = useMemo(() => (checklistItems || []).length, [checklistItems]);
 
@@ -453,13 +484,15 @@ export default function ResidualPanel({ checklistItems = [], onUpdated }) {
       const n = riskNumber(l, i);
       if (n == null) continue;
 
-      if (n <= 3) high += 1;
-      else if (n <= 6) med += 1;
+      const policy = getRiskPolicyForType(riskPolicyByStandard, x.type);
+
+      if (n >= policy.highMin) high += 1;
+      else if (n >= policy.mediumMin) med += 1;
       else low += 1;
     }
 
     return { high, med, low };
-  }, [targets]);
+  }, [targets, riskPolicyByStandard]);
 
   const highPriorityRows = useMemo(() => {
     return targets
@@ -473,12 +506,14 @@ export default function ResidualPanel({ checklistItems = [], onUpdated }) {
           owner: safeStr(x.treatment_owner),
           due: safeStr(x.treatment_due_date),
           risk: n,
+          acceptanceThreshold: getRiskPolicyForType(riskPolicyByStandard, x.type).acceptanceThreshold,
+          metricLabel: getRiskPolicyForType(riskPolicyByStandard, x.type).metricLabel,
         };
       })
-      .filter((x) => x.risk != null && x.risk <= 3)
-      .sort((a, b) => a.risk - b.risk || a.code.localeCompare(b.code))
+      .filter((x) => x.risk != null && x.risk > x.acceptanceThreshold)
+      .sort((a, b) => b.risk - a.risk || a.code.localeCompare(b.code))
       .slice(0, 5);
-  }, [targets]);
+  }, [targets, riskPolicyByStandard]);
 
   const totalPages = Math.max(1, Math.ceil(targets.length / PAGE_SIZE));
   const pageSafe = Math.min(Math.max(1, page), totalPages);
@@ -547,8 +582,11 @@ export default function ResidualPanel({ checklistItems = [], onUpdated }) {
               mediumRisk={dist.med}
               lowRisk={dist.low}
             />
-            <HighResidualPriority rows={highPriorityRows} />
-            <RiskMatrixMini />
+            <HighResidualPriority
+              rows={highPriorityRows}
+              policy={riskPolicyByStandard.ISMS}
+            />
+            <RiskMatrixMini policy={riskPolicyByStandard.ISMS} />
           </div>
 
           <div className="panel-filter-card rounded-2xl border border-slate-200 bg-white p-4">
@@ -612,6 +650,7 @@ export default function ResidualPanel({ checklistItems = [], onUpdated }) {
             onSave={onSave}
             editable={allPrerequisitesCompleted}
             blockMessage={blockMessage}
+            riskPolicy={getRiskPolicyForType(riskPolicyByStandard, row.type)}
           />
         ))}
 

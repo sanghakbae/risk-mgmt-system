@@ -2,6 +2,15 @@
 import React, { useMemo, useState, useRef, useEffect } from "react";
 import Button from "../ui/Button";
 import { updateChecklistByCode } from "../api/checklist";
+import { fetchRiskEvaluationPolicy } from "../api/admin";
+import {
+  DEFAULT_DOA_THRESHOLD,
+  DEFAULT_RISK_HIGH_MIN,
+  DEFAULT_RISK_MEDIUM_MIN,
+  getRiskPolicyForType,
+  isRiskAccepted,
+  normalizeRiskPolicyValue,
+} from "../utils/riskPolicy";
 
 const TYPE_ALL = "전체";
 const TYPE_ISMS = "ISMS";
@@ -39,38 +48,36 @@ function getTreatmentBlockMessage(totalCount, statusDoneCount, vulnDoneCount, ri
 }
 
 function riskNumber(l, i) {
-  const map = {
-    "3-1": 6,
-    "3-2": 3,
-    "3-3": 1,
-    "2-1": 8,
-    "2-2": 5,
-    "2-3": 2,
-    "1-1": 9,
-    "1-2": 7,
-    "1-3": 4,
-  };
-  return map[`${l}-${i}`] ?? null;
+  const likelihood = Number(l);
+  const impact = Number(i);
+  if (!Number.isFinite(likelihood) || !Number.isFinite(impact)) return null;
+  return likelihood * impact;
 }
 
-function riskLevel(n) {
+function riskLevel(n, policy) {
+  const highMin = Number(policy?.highMin ?? DEFAULT_RISK_HIGH_MIN);
+  const mediumMin = Number(policy?.mediumMin ?? DEFAULT_RISK_MEDIUM_MIN);
   if (n == null) return "Unknown";
-  if (n <= 3) return "High";
-  if (n <= 6) return "Medium";
+  if (n >= highMin) return "High";
+  if (n >= mediumMin) return "Medium";
   return "Low";
 }
 
-function riskLabelFromNumber(n) {
+function riskLabelFromNumber(n, policy) {
+  const highMin = Number(policy?.highMin ?? DEFAULT_RISK_HIGH_MIN);
+  const mediumMin = Number(policy?.mediumMin ?? DEFAULT_RISK_MEDIUM_MIN);
   if (n == null) return "Risk -";
-  if (n <= 3) return `Risk ${n} · High`;
-  if (n <= 6) return `Risk ${n} · Medium`;
+  if (n >= highMin) return `Risk ${n} · High`;
+  if (n >= mediumMin) return `Risk ${n} · Medium`;
   return `Risk ${n} · Low`;
 }
 
-function badgeClassFromRisk(n) {
+function badgeClassFromRisk(n, policy) {
+  const highMin = Number(policy?.highMin ?? DEFAULT_RISK_HIGH_MIN);
+  const mediumMin = Number(policy?.mediumMin ?? DEFAULT_RISK_MEDIUM_MIN);
   if (n == null) return "bg-slate-100 text-slate-700 border-slate-200";
-  if (n <= 3) return "bg-rose-50 text-rose-700 border-rose-200";
-  if (n <= 6) return "bg-amber-50 text-amber-800 border-amber-200";
+  if (n >= highMin) return "bg-rose-50 text-rose-700 border-rose-200";
+  if (n >= mediumMin) return "bg-amber-50 text-amber-800 border-amber-200";
   return "bg-slate-50 text-slate-700 border-slate-200";
 }
 
@@ -107,66 +114,80 @@ function treatmentBadge(strategy) {
   return { text: "수용", cls: "bg-emerald-50 text-emerald-700 border-emerald-200" };
 }
 
-function StrategyGuide() {
+function StrategyGuide({ policy }) {
+  const threshold = policy?.acceptanceThreshold ?? policy?.doaThreshold ?? DEFAULT_DOA_THRESHOLD;
+  const metricLabel = policy?.metricLabel ?? "DoA";
+  const [expanded, setExpanded] = useState(true);
+
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-4">
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex items-center justify-between gap-3">
         <div>
           <div className="text-sm font-semibold text-slate-900">처리 전략 안내</div>
           <div className="text-xs text-slate-500">위험을 어떤 방식으로 처리할지 결정합니다.</div>
         </div>
 
-        <div className="text-xs px-2 py-1 rounded-full border border-slate-200 bg-slate-50 text-slate-600">
-          TIP
-        </div>
+        <button
+          type="button"
+          onClick={() => setExpanded((prev) => !prev)}
+          className="shrink-0 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+          aria-expanded={expanded}
+        >
+          {expanded ? "접기" : "펼치기"}
+        </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
-          <div className="text-sm font-semibold text-emerald-900">수용 (Accept)</div>
-          <ul className="text-xs text-emerald-900 mt-1 space-y-1 list-disc pl-4">
-            <li>위험을 현재 상태로 유지</li>
-            <li>개선이 어렵거나 비용 대비 효과가 낮을 때</li>
-            <li>수용 사유 기록 권장</li>
-          </ul>
-        </div>
+      {expanded ? (
+        <>
+          <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+              <div className="text-sm font-semibold text-emerald-900">수용 (Accept)</div>
+              <ul className="text-xs text-emerald-900 mt-1 space-y-1 list-disc pl-4">
+                <li>위험을 현재 상태로 유지</li>
+                <li>개선이 어렵거나 비용 대비 효과가 낮을 때</li>
+                <li>수용 사유 기록 권장</li>
+              </ul>
+            </div>
 
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
-          <div className="text-sm font-semibold text-amber-900">감소 (Mitigate)</div>
-          <ul className="text-xs text-amber-900 mt-1 space-y-1 list-disc pl-4">
-            <li>보안 통제로 위험 감소</li>
-            <li>가장 일반적인 대응 전략</li>
-            <li>예: 패치, 설정 변경, 접근통제</li>
-          </ul>
-        </div>
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
+              <div className="text-sm font-semibold text-amber-900">감소 (Mitigate)</div>
+              <ul className="text-xs text-amber-900 mt-1 space-y-1 list-disc pl-4">
+                <li>보안 통제로 위험 감소</li>
+                <li>가장 일반적인 대응 전략</li>
+                <li>예: 패치, 설정 변경, 접근통제</li>
+              </ul>
+            </div>
 
-        <div className="rounded-xl border border-rose-200 bg-rose-50 p-3">
-          <div className="text-sm font-semibold text-rose-900">회피 (Avoid)</div>
-          <ul className="text-xs text-rose-900 mt-1 space-y-1 list-disc pl-4">
-            <li>위험이 발생하는 기능 제거</li>
-            <li>High 위험 또는 규제 대응 시</li>
-            <li>예: 기능 비활성화, 서비스 중단</li>
-          </ul>
-        </div>
+            <div className="rounded-xl border border-rose-200 bg-rose-50 p-3">
+              <div className="text-sm font-semibold text-rose-900">회피 (Avoid)</div>
+              <ul className="text-xs text-rose-900 mt-1 space-y-1 list-disc pl-4">
+                <li>위험이 발생하는 기능 제거</li>
+                <li>High 위험 또는 규제 대응 시</li>
+                <li>예: 기능 비활성화, 서비스 중단</li>
+              </ul>
+            </div>
 
-        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-          <div className="text-sm font-semibold text-slate-900">전가 (Transfer)</div>
-          <ul className="text-xs text-slate-700 mt-1 space-y-1 list-disc pl-4">
-            <li>위험을 제3자에게 이전</li>
-            <li>책임은 계약으로 관리</li>
-            <li>예: 외주 운영, 보안관제, 보험</li>
-          </ul>
-        </div>
-      </div>
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <div className="text-sm font-semibold text-slate-900">전가 (Transfer)</div>
+              <ul className="text-xs text-slate-700 mt-1 space-y-1 list-disc pl-4">
+                <li>위험을 제3자에게 이전</li>
+                <li>책임은 계약으로 관리</li>
+                <li>예: 외주 운영, 보안관제, 보험</li>
+              </ul>
+            </div>
+          </div>
 
-      <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
-        <div className="font-semibold mb-1">작성 팁</div>
-        <div className="space-y-1">
-          <div>• High(Risk 1~3) → 감소 또는 회피 우선 검토</div>
-          <div>• 수용 선택 시 → 수용 사유 + 재평가 시점 기록</div>
-          <div>• 전가 선택 시 → 계약/SLA 근거 기록</div>
-        </div>
-      </div>
+          <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
+            <div className="font-semibold mb-1">작성 팁</div>
+            <div className="space-y-1">
+              <div>• {metricLabel} 기준 Risk {threshold} 이하 → 허용 가능</div>
+              <div>• {metricLabel} 기준 Risk {threshold} 초과 → 조치 필요</div>
+              <div>• 수용 선택 시 → 수용 사유 + 재평가 시점 기록</div>
+              <div>• 전가 선택 시 → 계약/SLA 근거 기록</div>
+            </div>
+          </div>
+        </>
+      ) : null}
     </div>
   );
 }
@@ -188,14 +209,25 @@ function StatPill({ label, value, tone = "slate" }) {
   );
 }
 
+const FILTER_CONTROL_CLASS =
+  "h-10 w-full rounded-xl border border-slate-200 px-3 text-sm leading-5 bg-white";
+
 function autoResize(el) {
   if (!el) return;
   el.style.height = "auto";
   el.style.height = `${el.scrollHeight}px`;
 }
 
-function TreatmentCard({ row, isSaving, onSave, editable, blockMessage }) {
-  const [strategy, setStrategy] = useState(safeStr(row.treatment_strategy) || "수용");
+function TreatmentCard({ row, isSaving, onSave, editable, blockMessage, riskPolicy }) {
+  const baseRisk = useMemo(() => {
+    const l = row.likelihood == null ? null : Number(row.likelihood);
+    const i = row.impact == null ? null : Number(row.impact);
+    if (!l || !i) return null;
+    return riskNumber(l, i);
+  }, [row.likelihood, row.impact]);
+  const forceAccept = isRiskAccepted(baseRisk, riskPolicy);
+
+  const [strategy, setStrategy] = useState(forceAccept ? "수용" : safeStr(row.treatment_strategy) || "수용");
   const [acceptReason, setAcceptReason] = useState(safeStr(row.accept_reason));
   const [plan, setPlan] = useState(safeStr(row.treatment_plan));
   const [owner, setOwner] = useState(safeStr(row.treatment_owner));
@@ -206,7 +238,7 @@ function TreatmentCard({ row, isSaving, onSave, editable, blockMessage }) {
   const acceptRef = useRef(null);
 
   useEffect(() => {
-    setStrategy(safeStr(row.treatment_strategy) || "수용");
+    setStrategy(forceAccept ? "수용" : safeStr(row.treatment_strategy) || "수용");
     setAcceptReason(safeStr(row.accept_reason));
     setPlan(safeStr(row.treatment_plan));
     setOwner(safeStr(row.treatment_owner));
@@ -219,19 +251,14 @@ function TreatmentCard({ row, isSaving, onSave, editable, blockMessage }) {
     row.treatment_owner,
     row.treatment_due_date,
     row.treatment_status,
+    forceAccept,
   ]);
 
   useEffect(() => autoResize(planRef.current), [plan]);
   useEffect(() => autoResize(acceptRef.current), [acceptReason, strategy]);
 
-  const baseRisk = useMemo(() => {
-    const l = row.likelihood == null ? null : Number(row.likelihood);
-    const i = row.impact == null ? null : Number(row.impact);
-    if (!l || !i) return null;
-    return riskNumber(l, i);
-  }, [row.likelihood, row.impact]);
-
-  const tb = treatmentBadge(strategy);
+  const effectiveStrategy = forceAccept ? "수용" : strategy;
+  const tb = treatmentBadge(effectiveStrategy);
 
   async function handleSave() {
     if (!editable) {
@@ -240,8 +267,8 @@ function TreatmentCard({ row, isSaving, onSave, editable, blockMessage }) {
     }
 
     await onSave(row.code, {
-      treatment_strategy: strategy,
-      accept_reason: strategy === "수용" ? (acceptReason === "" ? null : acceptReason) : null,
+      treatment_strategy: effectiveStrategy,
+      accept_reason: effectiveStrategy === "수용" ? (acceptReason === "" ? null : acceptReason) : null,
       treatment_plan: plan === "" ? null : plan,
       treatment_owner: owner === "" ? null : owner,
       treatment_due_date: due === "" ? null : due,
@@ -266,8 +293,8 @@ function TreatmentCard({ row, isSaving, onSave, editable, blockMessage }) {
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
-          <span className={["px-3 py-1 rounded-full border text-xs font-semibold", badgeClassFromRisk(baseRisk)].join(" ")}>
-            {riskLabelFromNumber(baseRisk)}
+          <span className={["px-3 py-1 rounded-full border text-xs font-semibold", badgeClassFromRisk(baseRisk, riskPolicy)].join(" ")}>
+            {riskLabelFromNumber(baseRisk, riskPolicy)}
           </span>
           <span className={["px-3 py-1 rounded-full border text-xs font-semibold", tb.cls].join(" ")}>
             {tb.text}
@@ -304,12 +331,12 @@ function TreatmentCard({ row, isSaving, onSave, editable, blockMessage }) {
             <div>
               <div className="text-xs font-semibold text-slate-700 mb-1">처리 전략</div>
               <select
-                value={strategy}
+                value={effectiveStrategy}
                 onChange={(e) => setStrategy(e.target.value)}
-                disabled={!editable || isSaving}
+                disabled={!editable || isSaving || forceAccept}
                 className={[
                   "w-full rounded-xl border px-3 py-2 text-sm",
-                  editable
+                  editable && !forceAccept
                     ? "border-slate-200 bg-white"
                     : "border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed",
                 ].join(" ")}
@@ -319,6 +346,11 @@ function TreatmentCard({ row, isSaving, onSave, editable, blockMessage }) {
                 <option value="회피">회피</option>
                 <option value="전가">전가</option>
               </select>
+              {forceAccept ? (
+                <div className="mt-1 text-xs text-emerald-700">
+                  {riskPolicy?.metricLabel ?? "DoA"} 기준 이하라 수용으로 고정됩니다.
+                </div>
+              ) : null}
             </div>
 
             <div>
@@ -405,21 +437,21 @@ function TreatmentCard({ row, isSaving, onSave, editable, blockMessage }) {
                 ref={acceptRef}
                 value={acceptReason}
                 rows={3}
-                disabled={!editable || isSaving || strategy !== "수용"}
+                disabled={!editable || isSaving || effectiveStrategy !== "수용"}
                 onChange={(e) => {
                   setAcceptReason(e.target.value);
                   autoResize(e.target);
                 }}
                 className={[
                   "w-full rounded-xl border px-3 py-2 text-sm resize-none overflow-hidden",
-                  !editable || strategy !== "수용"
+                  !editable || effectiveStrategy !== "수용"
                     ? "border-slate-200 bg-slate-50 text-slate-400 cursor-not-allowed"
                     : "border-slate-200 bg-white",
                 ].join(" ")}
                 placeholder={
                   !editable
                     ? "선행 단계 전체 완료 후 입력 가능"
-                    : strategy !== "수용"
+                    : effectiveStrategy !== "수용"
                       ? "수용 선택 시 입력 가능"
                       : "예: 운영상 즉시 개선 어려움, 대체 통제 적용, 재평가 일정..."
                 }
@@ -457,12 +489,33 @@ function matchQuery(row, q) {
 
 export default function RiskTreatmentPanel({ checklistItems = [], onUpdated }) {
   const [savingCode, setSavingCode] = useState(null);
+  const [riskPolicyByStandard, setRiskPolicyByStandard] = useState(() =>
+    normalizeRiskPolicyValue(null)
+  );
 
   const [q, setQ] = useState("");
   const [riskF, setRiskF] = useState("All");
   const [strategyF, setStrategyF] = useState("All");
   const [statusF, setStatusF] = useState("All");
   const [sortKey, setSortKey] = useState("risk_desc");
+
+  useEffect(() => {
+    let mounted = true;
+
+    (async () => {
+      try {
+        const value = await fetchRiskEvaluationPolicy();
+        if (!mounted) return;
+        setRiskPolicyByStandard(normalizeRiskPolicyValue(value));
+      } catch (e) {
+        console.error("risk evaluation policy load error:", e);
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const totalCount = useMemo(() => (checklistItems || []).length, [checklistItems]);
 
@@ -500,9 +553,10 @@ export default function RiskTreatmentPanel({ checklistItems = [], onUpdated }) {
       const l = row.likelihood == null ? null : Number(row.likelihood);
       const i = row.impact == null ? null : Number(row.impact);
       const rn = l && i ? riskNumber(l, i) : null;
-      return { ...row, _riskNumber: rn, _riskLevel: riskLevel(rn) };
+      const policy = getRiskPolicyForType(riskPolicyByStandard, row.type);
+      return { ...row, _riskNumber: rn, _riskLevel: riskLevel(rn, policy) };
     });
-  }, [targetsRaw]);
+  }, [targetsRaw, riskPolicyByStandard]);
 
   const doneCount = useMemo(() => {
     return targets.filter((x) => safeStr(x.treatment_strategy)).length;
@@ -526,7 +580,15 @@ export default function RiskTreatmentPanel({ checklistItems = [], onUpdated }) {
     let rows = [...targets];
 
     if (riskF !== "All") rows = rows.filter((r) => r._riskLevel === riskF);
-    if (strategyF !== "All") rows = rows.filter((r) => safeStr(r.treatment_strategy || "수용") === strategyF);
+    if (strategyF !== "All") {
+      rows = rows.filter((r) => {
+        const policy = getRiskPolicyForType(riskPolicyByStandard, r.type);
+        const effectiveStrategy = isRiskAccepted(r._riskNumber, policy)
+          ? "수용"
+          : safeStr(r.treatment_strategy || "수용");
+        return effectiveStrategy === strategyF;
+      });
+    }
     if (statusF !== "All") {
       if (statusF === "(미선택)") rows = rows.filter((r) => !safeStr(r.treatment_status));
       else rows = rows.filter((r) => safeStr(r.treatment_status) === statusF);
@@ -535,9 +597,9 @@ export default function RiskTreatmentPanel({ checklistItems = [], onUpdated }) {
 
     rows.sort((a, b) => {
       if (sortKey === "risk_desc") {
-        const ar = a._riskNumber ?? 999;
-        const br = b._riskNumber ?? 999;
-        return ar - br;
+        const ar = a._riskNumber ?? -1;
+        const br = b._riskNumber ?? -1;
+        return br - ar;
       }
       if (sortKey === "due_asc") return safeStr(a.treatment_due_date).localeCompare(safeStr(b.treatment_due_date));
       if (sortKey === "due_desc") return safeStr(b.treatment_due_date).localeCompare(safeStr(a.treatment_due_date));
@@ -546,7 +608,7 @@ export default function RiskTreatmentPanel({ checklistItems = [], onUpdated }) {
     });
 
     return rows;
-  }, [targets, riskF, strategyF, statusF, q, sortKey]);
+  }, [targets, riskF, strategyF, statusF, q, sortKey, riskPolicyByStandard]);
 
   async function onSave(code, payload) {
     try {
@@ -607,7 +669,7 @@ export default function RiskTreatmentPanel({ checklistItems = [], onUpdated }) {
                 <input
                   value={q}
                   onChange={(e) => setQ(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                  className={FILTER_CONTROL_CLASS}
                   placeholder="코드/도메인/항목명/사유/담당/계획 검색"
                 />
               </div>
@@ -617,7 +679,7 @@ export default function RiskTreatmentPanel({ checklistItems = [], onUpdated }) {
                 <select
                   value={riskF}
                   onChange={(e) => setRiskF(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm bg-white"
+                  className={FILTER_CONTROL_CLASS}
                 >
                   <option value="All">All</option>
                   <option value="High">High</option>
@@ -631,7 +693,7 @@ export default function RiskTreatmentPanel({ checklistItems = [], onUpdated }) {
                 <select
                   value={strategyF}
                   onChange={(e) => setStrategyF(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm bg-white"
+                  className={FILTER_CONTROL_CLASS}
                 >
                   <option value="All">All</option>
                   <option value="수용">수용</option>
@@ -646,7 +708,7 @@ export default function RiskTreatmentPanel({ checklistItems = [], onUpdated }) {
                 <select
                   value={statusF}
                   onChange={(e) => setStatusF(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm bg-white"
+                  className={FILTER_CONTROL_CLASS}
                 >
                   <option value="All">All</option>
                   <option value="(미선택)">(미선택)</option>
@@ -662,7 +724,7 @@ export default function RiskTreatmentPanel({ checklistItems = [], onUpdated }) {
                 <select
                   value={sortKey}
                   onChange={(e) => setSortKey(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm bg-white"
+                  className={FILTER_CONTROL_CLASS}
                 >
                   <option value="risk_desc">Risk 우선(High 먼저)</option>
                   <option value="due_asc">기한 임박(오름차순)</option>
@@ -677,7 +739,7 @@ export default function RiskTreatmentPanel({ checklistItems = [], onUpdated }) {
             </div>
           </div>
 
-          <StrategyGuide />
+          <StrategyGuide policy={riskPolicyByStandard.ISMS} />
         </div>
 
         <div className="mt-4 border-b border-slate-200" />
@@ -692,6 +754,7 @@ export default function RiskTreatmentPanel({ checklistItems = [], onUpdated }) {
             onSave={onSave}
             editable={allPrerequisitesCompleted}
             blockMessage={blockMessage}
+            riskPolicy={getRiskPolicyForType(riskPolicyByStandard, row.type)}
           />
         ))}
 
