@@ -263,7 +263,7 @@ src
 ## Installation
 
 ```bash
-git clone git@github-sanghakbae:sanghakbae/risk-mgmt-system.git
+git clone git@github.com:sanghakbae/risk-mgmt-system.git
 cd risk-mgmt-system
 npm install
 ```
@@ -296,7 +296,7 @@ The production build outputs static files to `dist`.
 
 ## Deployment
 
-This repository is configured for GitHub Pages deployment.
+This repository is deployed with GitHub Pages and served from the custom domain root.
 
 Custom domain file:
 
@@ -310,7 +310,7 @@ Current CNAME:
 rms.sanghak.kr
 ```
 
-Vite base path is `/`, which is required for serving from the custom domain root.
+Vite base path is `/`, which matches `https://rms.sanghak.kr`.
 
 ## Security Notes
 

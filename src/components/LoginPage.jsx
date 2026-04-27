@@ -22,17 +22,10 @@ export default function LoginPage() {
     try {
       setLoading(true);
 
-      const isGithubPages =
-        window.location.hostname === "sanghakbae.github.io";
-
-      const redirectTo = isGithubPages
-        ? `${window.location.origin}/risk-mgmt-system/`
-        : window.location.origin;
-
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo,
+          redirectTo: window.location.origin,
           queryParams: {
             access_type: "offline",
             prompt: "consent",
