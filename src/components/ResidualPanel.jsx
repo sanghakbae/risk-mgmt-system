@@ -532,7 +532,7 @@ export default function ResidualPanel({ checklistItems = [], onUpdated }) {
 
       setSavingCode(code);
       await updateChecklistByCode(code, payload);
-      onUpdated?.();
+      onUpdated?.({ code, patch: payload });
     } catch (e) {
       alert("저장 실패: " + e.message);
     } finally {

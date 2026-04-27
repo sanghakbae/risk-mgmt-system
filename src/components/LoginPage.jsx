@@ -1,8 +1,11 @@
 import React, { useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 
+const DEFAULT_ALLOWED_DOMAINS = ["muhayu.com"];
+
 export default function LoginPage() {
   const [loading, setLoading] = useState(false);
+  const [allowedDomains, setAllowedDomains] = useState(DEFAULT_ALLOWED_DOMAINS);
 
   useEffect(() => {
     const {
@@ -15,6 +18,42 @@ export default function LoginPage() {
 
     return () => {
       subscription?.unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+
+    (async () => {
+      try {
+        const { data, error } = await supabase
+          .from("security_settings")
+          .select("value")
+          .eq("key", "allowed_domain")
+          .maybeSingle();
+
+        if (error) throw error;
+
+        const domains = Array.isArray(data?.value?.domains)
+          ? data.value.domains
+          : data?.value?.domain
+            ? [data.value.domain]
+            : DEFAULT_ALLOWED_DOMAINS;
+
+        if (!mounted) return;
+
+        const normalized = domains
+          .map((x) => String(x ?? "").trim().toLowerCase())
+          .filter(Boolean);
+
+        setAllowedDomains(normalized.length ? normalized : DEFAULT_ALLOWED_DOMAINS);
+      } catch (e) {
+        console.error("allowed_domain load error:", e);
+      }
+    })();
+
+    return () => {
+      mounted = false;
     };
   }, []);
 
@@ -72,7 +111,7 @@ export default function LoginPage() {
               <span className="text-slate-300">•</span>
               <span>최소 권한</span>
               <span className="text-slate-300">•</span>
-              <span className="truncate">muhayu.com</span>
+              <span className="truncate">{allowedDomains.join(", ")}</span>
             </div>
           </div>
 

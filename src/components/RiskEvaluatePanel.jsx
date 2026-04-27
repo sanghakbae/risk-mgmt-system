@@ -523,7 +523,7 @@ export default function RiskEvaluatePanel({ checklistItems = [], onUpdated }) {
         [code]: { likelihood: String(l), impact: String(i) },
       }));
 
-      onUpdated?.();
+      onUpdated?.({ code, patch: payload });
     } catch (e) {
       alert("저장 실패: " + (e?.message || "unknown"));
     } finally {
@@ -536,12 +536,14 @@ export default function RiskEvaluatePanel({ checklistItems = [], onUpdated }) {
 
     try {
       setSyncingRisk(true);
+      const patches = [];
 
       for (const { row, expectedRisk } of riskMismatchRows) {
         await updateChecklistByCode(safeStr(row.code), { risk: expectedRisk });
+        patches.push({ code: safeStr(row.code), patch: { risk: expectedRisk } });
       }
 
-      onUpdated?.();
+      onUpdated?.(patches);
       alert(`Risk 값 ${riskMismatchRows.length}건을 재계산했습니다.`);
     } catch (e) {
       alert("Risk 재계산 실패: " + (e?.message || "unknown"));

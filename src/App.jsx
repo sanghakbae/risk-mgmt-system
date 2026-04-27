@@ -31,8 +31,9 @@ import AdminAuditLogsPanel from "./components/AdminAuditLogsPanel";
 import AdminAccessPanel from "./components/AdminAccessPanel";
 
 import Button from "./ui/Button";
+import { fetchChecklistRows } from "./api/checklist";
 import { supabase } from "./lib/supabaseClient";
-import { fetchMyRole, syncMyProfile, writeAuditLog } from "./api/admin";
+import { fetchChecklistStandard, fetchMyRole, syncMyProfile, writeAuditLog } from "./api/admin";
 
 const DEFAULT_ALLOWED_DOMAINS = ["muhayu.com"];
 const AUTH_INIT_TIMEOUT_MS = 8000;
@@ -85,6 +86,20 @@ function normalizeChecklistRows(rows) {
       Guide: r.Guide ?? r.guide ?? r["Guide"] ?? "",
     }))
     .sort((a, b) => compareChecklistCode(a?.code, b?.code));
+}
+
+function normalizeChecklistType(value) {
+  const raw = safeStr(value).trim().toUpperCase();
+  if (raw.includes("ISO")) return "ISO27001";
+  if (raw.includes("ISMS")) return "ISMS";
+  return "";
+}
+
+function mergeChecklistPatch(rows, code, patch) {
+  return (rows ?? []).map((row) => {
+    if (safeStr(row?.code) !== safeStr(code)) return row;
+    return normalizeChecklistRows([{ ...row, ...patch }])[0] ?? { ...row, ...patch };
+  });
 }
 
 function normalizeDomains(rawValue) {
@@ -363,7 +378,7 @@ function Sidebar({ collapsed, activeKey, onSelect, onToggle, role, stepStates = 
 
                       {!collapsed ? (
                         <div className="min-w-0 text-left flex-1">
-                          <div className="text-[17px] font-extrabold leading-tight truncate flex items-center gap-1.5">
+                          <div className="text-[16px] font-extrabold leading-tight truncate flex items-center gap-1.5">
                             <span>{s.sidebarTitle ?? s.title}</span>
                             {locked ? <Lock className="w-3.5 h-3.5 shrink-0" /> : null}
                             {locked ? (
@@ -458,7 +473,7 @@ function Sidebar({ collapsed, activeKey, onSelect, onToggle, role, stepStates = 
 
                     {!collapsed ? (
                       <div className="min-w-0 text-left flex-1">
-                          <div className="text-[17px] font-extrabold leading-tight truncate flex items-center gap-1.5">
+                          <div className="text-[16px] font-extrabold leading-tight truncate flex items-center gap-1.5">
                             <span>{s.sidebarTitle ?? s.title}</span>
                             {!isReportLead && locked ? <Lock className="w-3.5 h-3.5 shrink-0" /> : null}
                             {!isReportLead && locked ? (
@@ -630,40 +645,48 @@ export default function App({ embeddedContext } = {}) {
   const [activeStep, setActiveStep] = useState(() => getStoredActiveStep());
 
   const [checklistItems, setChecklistItems] = useState([]);
+  const [checklistStandard, setChecklistStandard] = useState(null);
+  const [checklistStandardLoading, setChecklistStandardLoading] = useState(true);
   const [checklistReloadKey, setChecklistReloadKey] = useState(0);
   const [adminReloadKey, setAdminReloadKey] = useState(0);
   const [risks, setRisks] = useState([]);
 
-  const totalChecklistCount = checklistItems.length;
+  const visibleChecklistItems = useMemo(() => {
+    if (checklistStandardLoading) return [];
+    if (!checklistStandard || checklistStandard === "전체") return checklistItems;
+    return checklistItems.filter((row) => normalizeChecklistType(row?.type) === checklistStandard);
+  }, [checklistItems, checklistStandard, checklistStandardLoading]);
+
+  const totalChecklistCount = visibleChecklistItems.length;
   const statusDoneCount = useMemo(
     () =>
-      checklistItems.filter((x) => safeStr(x?.status ?? x?.current_status ?? x?.state).trim() !== "")
+      visibleChecklistItems.filter((x) => safeStr(x?.status ?? x?.current_status ?? x?.state).trim() !== "")
         .length,
-    [checklistItems]
+    [visibleChecklistItems]
   );
   const vulnDoneCount = useMemo(
     () =>
-      checklistItems.filter((x) => {
+      visibleChecklistItems.filter((x) => {
         const resultText = safeStr(x?.result ?? x?.vulnResult).trim();
         return resultText === "양호" || resultText === "취약";
       }).length,
-    [checklistItems]
+    [visibleChecklistItems]
   );
   const riskDoneCount = useMemo(
     () =>
-      checklistItems.filter((x) => safeStr(x?.likelihood).trim() !== "" && safeStr(x?.impact).trim() !== "")
+      visibleChecklistItems.filter((x) => safeStr(x?.likelihood).trim() !== "" && safeStr(x?.impact).trim() !== "")
         .length,
-    [checklistItems]
+    [visibleChecklistItems]
   );
   const treatmentDoneCount = useMemo(
     () =>
-      checklistItems.filter((x) => {
+      visibleChecklistItems.filter((x) => {
         const strategy = safeStr(x?.strategy).trim();
         const mitigation = safeStr(x?.mitigation).trim();
         const acceptance = safeStr(x?.acceptance_reason).trim();
         return strategy !== "" || mitigation !== "" || acceptance !== "";
       }).length,
-    [checklistItems]
+    [visibleChecklistItems]
   );
 
   const stepStates = useMemo(
@@ -712,6 +735,31 @@ export default function App({ embeddedContext } = {}) {
 
     setStoredActiveStep(activeStep);
   }, [activeStep, role, visibleSteps]);
+
+  useEffect(() => {
+    let mounted = true;
+    setChecklistStandardLoading(true);
+
+    (async () => {
+      try {
+        const standard = await fetchChecklistStandard();
+        if (!mounted) return;
+        setChecklistStandard(standard);
+      } catch (e) {
+        console.error("Checklist standard load error:", e);
+        if (!mounted) return;
+        setChecklistStandard("ISMS");
+      } finally {
+        if (mounted) {
+          setChecklistStandardLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, [adminReloadKey]);
 
   const loadAllowedDomains = useCallback(async () => {
     try {
@@ -1091,32 +1139,50 @@ export default function App({ embeddedContext } = {}) {
   useEffect(() => {
     const CACHE_KEY = "checklist_cache_v1";
 
-    try {
-      const cached = JSON.parse(localStorage.getItem(CACHE_KEY) || "null");
-      if (Array.isArray(cached) && cached.length) {
-        setChecklistItems(cached);
-      }
-    } catch (e) {
-      console.warn("cache parse error", e);
-    }
-
     (async () => {
       try {
-        const { data, error } = await supabase
-          .from("checklist")
-          .select("*")
-          .order("code", { ascending: true });
-
-        if (error) throw error;
-
+        const data = await fetchChecklistRows();
         const normalized = normalizeChecklistRows(data);
         setChecklistItems(normalized);
-        localStorage.setItem(CACHE_KEY, JSON.stringify(normalized));
       } catch (e) {
         console.error("Checklist load error:", e);
+        setChecklistItems([]);
+        try {
+          localStorage.removeItem(CACHE_KEY);
+        } catch (cacheError) {
+          console.warn("checklist cache remove error", cacheError);
+        }
       }
     })();
   }, [checklistReloadKey]);
+
+  useEffect(() => {
+    const CACHE_KEY = "checklist_cache_v1";
+    try {
+      if (checklistItems.length > 0) {
+        localStorage.setItem(CACHE_KEY, JSON.stringify(checklistItems));
+      } else {
+        localStorage.removeItem(CACHE_KEY);
+      }
+    } catch (e) {
+      console.warn("checklist cache save error", e);
+    }
+  }, [checklistItems]);
+
+  const applyChecklistUpdate = useCallback((updates) => {
+    if (!updates) return;
+
+    const list = Array.isArray(updates) ? updates : [updates];
+    setChecklistItems((prev) => {
+      let next = prev;
+      for (const update of list) {
+        const code = safeStr(update?.code);
+        if (!code) continue;
+        next = mergeChecklistPatch(next, code, update.patch ?? {});
+      }
+      return next;
+    });
+  }, []);
 
   function approveAll() {
     setRisks((prev) => prev.map((r) => ({ ...r, status: "Approved" })));
@@ -1136,6 +1202,14 @@ export default function App({ embeddedContext } = {}) {
 
   if (!session) {
     return <LoginPage />;
+  }
+
+  if (checklistStandardLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-slate-600">
+        보안 설정을 불러오는 중...
+      </div>
+    );
   }
 
   const effectiveExpiry = computeEffectiveExpiry(session, sessionTimeoutMinutes);
@@ -1217,11 +1291,11 @@ export default function App({ embeddedContext } = {}) {
             />
 
             <div className="pt-1.5 md:pt-3 pb-24 md:pb-10">
-              {activeStep === "dashboard" && <DashboardPanel checklistItems={checklistItems} />}
+              {activeStep === "dashboard" && <DashboardPanel checklistItems={visibleChecklistItems} />}
 
               {activeStep === "checklist" && (
                 <ChecklistPanel
-                  checklistItems={checklistItems}
+                  checklistItems={visibleChecklistItems}
                   setChecklistItems={setChecklistItems}
                   onReload={() => {
                     localStorage.removeItem("checklist_cache_v1");
@@ -1232,42 +1306,43 @@ export default function App({ embeddedContext } = {}) {
 
               {activeStep === "status" && (
                 <StatusWritePanel
-                  checklistItems={checklistItems}
-                  onUpdated={() => setChecklistReloadKey((k) => k + 1)}
+                  checklistItems={visibleChecklistItems}
+                  onUpdated={applyChecklistUpdate}
                 />
               )}
 
               {activeStep === "vuln" && (
                 <VulnIdentifyPanel
-                  checklistItems={checklistItems}
-                  onUpdated={() => setChecklistReloadKey((k) => k + 1)}
+                  checklistItems={visibleChecklistItems}
+                  onUpdated={applyChecklistUpdate}
                 />
               )}
 
               {activeStep === "risk_evaluate" && (
                 <RiskEvaluatePanel
-                  checklistItems={checklistItems}
-                  onUpdated={() => setChecklistReloadKey((k) => k + 1)}
+                  checklistItems={visibleChecklistItems}
+                  onUpdated={applyChecklistUpdate}
                 />
               )}
 
               {activeStep === "risk_treatment" && (
                 <RiskTreatmentPanel
-                  checklistItems={checklistItems}
-                  onUpdated={() => setChecklistReloadKey((k) => k + 1)}
+                  checklistItems={visibleChecklistItems}
+                  checklistStandard={checklistStandard}
+                  onUpdated={applyChecklistUpdate}
                 />
               )}
 
               {activeStep === "residual" && (
                 <ResidualRiskPanel
-                  checklistItems={checklistItems}
-                  onUpdated={() => setChecklistReloadKey((k) => k + 1)}
+                  checklistItems={visibleChecklistItems}
+                  onUpdated={applyChecklistUpdate}
                 />
               )}
 
               {activeStep === "approve" && (
                 <ApprovePanel
-                  checklistItems={checklistItems}
+                  checklistItems={visibleChecklistItems}
                   onApproveAll={approveAll}
                 />
               )}

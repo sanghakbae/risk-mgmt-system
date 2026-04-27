@@ -151,8 +151,20 @@ export default function AdminSecurityPanel({ session, reloadKey, onChanged, canM
           )
         );
         const nextPolicy = normalizeRiskPolicyValue(byKey.risk_evaluation_policy?.value);
+        const rawStandard = String(
+          byKey.risk_evaluation_policy?.value?.standard ??
+          byKey.checklist_standard?.value?.standard ??
+          "ISMS"
+        ).trim().toUpperCase();
+        setSelectedStandard(rawStandard === "ISO27001" ? "ISO27001" : "ISMS");
         setRiskPolicyByStandard(nextPolicy);
-        setDoaThreshold(normalizeAcceptanceThreshold(nextPolicy.ISMS?.doa_threshold));
+        const initialStandard = rawStandard === "ISO27001" ? "ISO27001" : "ISMS";
+        const initialMetric = riskAcceptanceMetricForStandard(initialStandard);
+        setDoaThreshold(
+          normalizeAcceptanceThreshold(
+            nextPolicy?.[initialStandard]?.[initialMetric.key] ?? nextPolicy.ISMS?.doa_threshold
+          )
+        );
       } catch (e) {
         if (!mounted) return;
         console.error(e);
@@ -174,7 +186,8 @@ export default function AdminSecurityPanel({ session, reloadKey, onChanged, canM
     setDoaThreshold(normalizeAcceptanceThreshold(current[metric.key] ?? current.doa_threshold));
   }, [selectedStandard, riskPolicyByStandard]);
 
-  async function saveSetting(key, value, description) {
+  async function saveSetting(key, value, description, options = {}) {
+    const { showAlert = true } = options;
     try {
       setSavingKey(key);
       setError("");
@@ -196,7 +209,9 @@ export default function AdminSecurityPanel({ session, reloadKey, onChanged, canM
       });
 
       onChanged?.();
-      alert("저장되었습니다.");
+      if (showAlert) {
+        alert("저장되었습니다.");
+      }
     } catch (e) {
       console.error(e);
       setError(e.message || "저장에 실패했습니다.");
@@ -298,18 +313,22 @@ export default function AdminSecurityPanel({ session, reloadKey, onChanged, canM
       "risk_evaluation_policy",
       {
         ...riskPolicyByStandard,
+        standard: selectedStandard,
         [selectedStandard]: {
           [metric.key]: threshold,
         },
       },
-      "리스크 허용 기준"
+      "리스크 허용 기준",
+      { showAlert: false }
     );
     setRiskPolicyByStandard((prev) => ({
       ...prev,
+      standard: selectedStandard,
       [selectedStandard]: {
         [metric.key]: threshold,
       },
     }));
+    alert("저장되었습니다.");
   }
 
   const rawPreview = useMemo(

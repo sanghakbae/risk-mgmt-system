@@ -402,7 +402,7 @@ export default function VulnIdentifyPanel({ checklistItems = [], onUpdated }) {
       );
 
       await updateChecklistByCode(code, payload);
-      onUpdated?.();
+      onUpdated?.({ code, patch: payload });
     } catch (e) {
       alert("저장 실패: " + e.message);
     } finally {

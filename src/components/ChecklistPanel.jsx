@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Download, Upload } from "lucide-react";
 import Papa from "papaparse";
 import Button from "../ui/Button";
+import { fetchChecklistRows } from "../api/checklist";
 import { supabase } from "../lib/supabaseClient";
 import TopProgressBar from "./TopProgressBar";
 
@@ -342,21 +343,9 @@ export default function ChecklistPanel({
   }
 
   async function reloadChecklistRows() {
-    const { data, error } = await supabase
-      .from("checklist")
-      .select("*")
-      .order("code", { ascending: true });
-
-    if (error) throw error;
-
+    const data = await fetchChecklistRows();
     const normalized = Array.isArray(data) ? [...data].sort((a, b) => compareCode(a?.code, b?.code)) : [];
     setChecklistItems?.(normalized);
-
-    try {
-      localStorage.setItem("checklist_cache_v1", JSON.stringify(normalized));
-    } catch (e) {
-      console.warn("checklist cache save error", e);
-    }
 
     onReload?.();
   }

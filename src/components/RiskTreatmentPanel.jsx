@@ -487,7 +487,11 @@ function matchQuery(row, q) {
   return hay.includes(q.toLowerCase());
 }
 
-export default function RiskTreatmentPanel({ checklistItems = [], onUpdated }) {
+export default function RiskTreatmentPanel({
+  checklistItems = [],
+  onUpdated,
+  checklistStandard = TYPE_ISMS,
+}) {
   const [savingCode, setSavingCode] = useState(null);
   const [riskPolicyByStandard, setRiskPolicyByStandard] = useState(() =>
     normalizeRiskPolicyValue(null)
@@ -517,19 +521,25 @@ export default function RiskTreatmentPanel({ checklistItems = [], onUpdated }) {
     };
   }, []);
 
-  const totalCount = useMemo(() => (checklistItems || []).length, [checklistItems]);
+  const scopedChecklistItems = useMemo(() => {
+    const rows = Array.isArray(checklistItems) ? checklistItems : [];
+    if (!checklistStandard || checklistStandard === TYPE_ALL) return rows;
+    return rows.filter((row) => normalizeType(row?.type) === checklistStandard);
+  }, [checklistItems, checklistStandard]);
+
+  const totalCount = useMemo(() => scopedChecklistItems.length, [scopedChecklistItems]);
 
   const statusDoneCount = useMemo(() => {
-    return (checklistItems || []).filter(hasStatusCompleted).length;
-  }, [checklistItems]);
+    return scopedChecklistItems.filter(hasStatusCompleted).length;
+  }, [scopedChecklistItems]);
 
   const vulnDoneCount = useMemo(() => {
-    return (checklistItems || []).filter(hasVulnCompleted).length;
-  }, [checklistItems]);
+    return scopedChecklistItems.filter(hasVulnCompleted).length;
+  }, [scopedChecklistItems]);
 
   const riskDoneCount = useMemo(() => {
-    return (checklistItems || []).filter(hasRiskEvaluation).length;
-  }, [checklistItems]);
+    return scopedChecklistItems.filter(hasRiskEvaluation).length;
+  }, [scopedChecklistItems]);
 
   const allPrerequisitesCompleted =
     totalCount > 0 &&
@@ -545,8 +555,8 @@ export default function RiskTreatmentPanel({ checklistItems = [], onUpdated }) {
   );
 
   const targetsRaw = useMemo(() => {
-    return (checklistItems || []).filter((x) => safeStr(x.result) === "취약");
-  }, [checklistItems]);
+    return scopedChecklistItems.filter((x) => safeStr(x.result) === "취약");
+  }, [scopedChecklistItems]);
 
   const targets = useMemo(() => {
     return targetsRaw.map((row) => {
@@ -619,7 +629,7 @@ export default function RiskTreatmentPanel({ checklistItems = [], onUpdated }) {
 
       setSavingCode(code);
       await updateChecklistByCode(code, payload);
-      onUpdated?.();
+      onUpdated?.({ code, patch: payload });
     } finally {
       setSavingCode(null);
     }
@@ -739,7 +749,7 @@ export default function RiskTreatmentPanel({ checklistItems = [], onUpdated }) {
             </div>
           </div>
 
-          <StrategyGuide policy={riskPolicyByStandard.ISMS} />
+          <StrategyGuide policy={getRiskPolicyForType(riskPolicyByStandard, checklistStandard)} />
         </div>
 
         <div className="mt-4 border-b border-slate-200" />

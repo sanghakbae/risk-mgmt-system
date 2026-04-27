@@ -4,6 +4,13 @@ function normalizeRole(role) {
   return role === "admin" ? "admin" : "viewer";
 }
 
+function normalizeChecklistStandardValue(rawValue) {
+  const raw = String(rawValue ?? "ISMS").trim();
+  const upper = raw.toUpperCase();
+  if (raw === "전체" || upper === "ALL") return "전체";
+  return upper === "ISO27001" ? "ISO27001" : "ISMS";
+}
+
 export async function syncMyProfile(user) {
   if (!user?.id) return null;
 
@@ -67,15 +74,24 @@ export async function fetchChecklistStandard() {
   const { data, error } = await supabase
     .from("security_settings")
     .select("value")
-    .eq("key", "checklist_standard")
+    .eq("key", "risk_evaluation_policy")
     .maybeSingle();
 
   if (error) throw error;
 
-  const raw = String(data?.value?.standard ?? "ISMS").trim();
-  const upper = raw.toUpperCase();
-  if (raw === "전체" || upper === "ALL") return "전체";
-  return upper === "ISO27001" ? "ISO27001" : "ISMS";
+  const policyStandard = data?.value?.standard;
+  if (policyStandard != null) {
+    return normalizeChecklistStandardValue(policyStandard);
+  }
+
+  const { data: legacyData, error: legacyError } = await supabase
+    .from("security_settings")
+    .select("value")
+    .eq("key", "checklist_standard")
+    .maybeSingle();
+
+  if (legacyError) throw legacyError;
+  return normalizeChecklistStandardValue(legacyData?.value?.standard);
 }
 
 export async function upsertSecuritySetting({ key, value, description, updatedBy }) {

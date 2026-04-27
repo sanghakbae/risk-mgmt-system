@@ -366,7 +366,13 @@ export default function StatusWritePanel({ checklistItems = [], onUpdated }) {
         evidence_url: serializedEvidence,
       });
 
-      onUpdated?.();
+      onUpdated?.({
+        code,
+        patch: {
+          status: statusValue === "" ? null : statusValue,
+          evidence_url: serializedEvidence,
+        },
+      });
       alert("저장 완료");
     } catch (e) {
       console.error("save error", e);
@@ -397,7 +403,12 @@ export default function StatusWritePanel({ checklistItems = [], onUpdated }) {
       const remained = parseEvidenceUrls(row.evidence_url).filter((x) => x !== url);
       await updateChecklistByCode(code, { evidence_url: serializeEvidenceUrls(remained) });
 
-      onUpdated?.();
+      onUpdated?.({
+        code,
+        patch: {
+          evidence_url: serializeEvidenceUrls(remained),
+        },
+      });
       alert("증적 삭제 완료");
     } catch (e) {
       alert(e?.message || "삭제 실패");
