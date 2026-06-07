@@ -149,7 +149,7 @@ Residual Risk = Residual Impact × Residual Likelihood
 
 Admin Security:
 
-- 허용 이메일 도메인 설정
+- 허용 이메일 설정
 - 세션 만료 시간 설정
 - 감사 로그 보관 기간 설정
 - ISMS DoA / ISO27001 ARL 기준 설정
@@ -171,35 +171,22 @@ Admin Access:
 
 ## Authentication
 
-인증은 Supabase Auth와 Google OAuth를 사용합니다.
+인증은 Firebase Authentication과 Google 로그인을 사용합니다.
 
 앱 흐름:
 
 ```text
 Frontend
-→ Supabase Auth Google OAuth 시작
+→ Firebase Authentication Google 로그인 시작
 → Google 로그인
-→ Supabase callback
 → 앱 redirect URL로 복귀
-→ Supabase session/JWT로 DB 접근
+→ Firebase ID token/session으로 Firestore와 Storage 접근
 ```
 
-현재 기본 허용 이메일 도메인:
+현재 기본 허용 이메일:
 
 ```text
-muhayu.com
-```
-
-Supabase URL Configuration 권장값:
-
-```text
-Site URL:
-https://rms.sanghak.kr
-
-Redirect URLs:
-https://rms.sanghak.kr
-http://localhost:5173
-http://localhost:5174
+totoriverce@gmail.com
 ```
 
 Google Cloud Console 설정:
@@ -209,9 +196,6 @@ Authorized JavaScript origins:
 https://rms.sanghak.kr
 http://localhost:5173
 http://localhost:5174
-
-Authorized redirect URI:
-https://zpkvnlipirbfuwpfxyja.supabase.co/auth/v1/callback
 ```
 
 ## Tech Stack
@@ -225,9 +209,9 @@ Frontend:
 
 Backend:
 
-- Supabase Auth
-- Supabase Database
-- PostgreSQL
+- Firebase Authentication
+- Cloud Firestore
+- Cloudflare R2
 
 ## Project Structure
 
@@ -250,7 +234,7 @@ src
 │  ├─ StatusWritePanel.jsx
 │  └─ VulnIdentifyPanel.jsx
 ├─ lib
-│  └─ supabaseClient.js
+│  └─ firebaseClient.js
 ├─ ui
 │  └─ Button.jsx
 ├─ utils
@@ -271,11 +255,16 @@ npm install
 Create `.env.local`:
 
 ```text
-VITE_SUPABASE_URL=
-VITE_SUPABASE_ANON_KEY=
+VITE_FIREBASE_API_KEY=
+VITE_FIREBASE_AUTH_DOMAIN=
+VITE_FIREBASE_PROJECT_ID=
+VITE_FIREBASE_STORAGE_BUCKET=
+VITE_FIREBASE_MESSAGING_SENDER_ID=
+VITE_FIREBASE_APP_ID=
+VITE_FIREBASE_MEASUREMENT_ID=
 VITE_ADMIN_EMAILS=
-VITE_SUPABASE_READ_CHECKLIST=1
-VITE_SUPABASE_WRITE_CHECKLIST=0
+VITE_R2_EVIDENCE_API_URL=
+VITE_R2_PUBLIC_BASE_URL=
 ```
 
 Run locally:
@@ -284,7 +273,7 @@ Run locally:
 npm run dev
 ```
 
-If port `5173` is already in use, Vite may use another port such as `5174`. That port must also be listed in Supabase Redirect URLs for local OAuth login.
+If port `5173` is already in use, Vite may use another port such as `5174`. That origin must also be allowed in Firebase Authentication / Google provider settings for local login.
 
 ## Build
 
@@ -314,11 +303,12 @@ Vite base path is `/`, which matches `https://rms.sanghak.kr`.
 
 ## Security Notes
 
-- Google OAuth is handled through Supabase Auth.
+- Google login is handled through Firebase Authentication.
+- Evidence files are stored in Cloudflare R2.
 - Browser session storage is used so the app session is cleared when the browser/tab session ends.
-- App-level session timeout is enforced in addition to Supabase token expiry.
+- App-level session timeout is enforced in addition to Firebase token expiry.
 - Admin actions are written to audit logs.
-- Domain-based login restriction is loaded from `security_settings.allowed_domain`.
+- Login restriction is locked to `totoriverce@gmail.com`.
 
 ## Current Risk Rules
 

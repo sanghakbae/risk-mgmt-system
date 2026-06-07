@@ -32,16 +32,16 @@ import AdminAccessPanel from "./components/AdminAccessPanel";
 
 import Button from "./ui/Button";
 import { fetchChecklistRows } from "./api/checklist";
-import { supabase } from "./lib/supabaseClient";
+import { firebaseBackend } from "./lib/firebaseClient";
 import { fetchChecklistStandard, fetchMyRole, syncMyProfile, writeAuditLog } from "./api/admin";
 
-const DEFAULT_ALLOWED_DOMAINS = ["muhayu.com"];
+const ALLOWED_EMAIL = "totoriverce@gmail.com";
+const DEFAULT_ALLOWED_DOMAINS = [ALLOWED_EMAIL];
 const AUTH_INIT_TIMEOUT_MS = 8000;
 const AUTH_INIT_RETRY_TIMEOUT_MS = 12000;
 const DEFAULT_SESSION_TIMEOUT_MINUTES = 60;
 const SESSION_LOGIN_AT_KEY = "app_session_login_at_v1";
 const ACTIVE_STEP_STORAGE_KEY = "app_active_step_v1";
-const LEGACY_AUTH_KEYS = ["sb-risk-mgmt-auth"];
 
 const STEPS = [
   { key: "dashboard", title: "대시보드", desc: "평가 현황, 진행률, 도메인별 위험을 한눈에 확인합니다.", sidebarTitle: "Analytics", sidebarDesc: "전체 현황 요약", icon: <LayoutDashboard className="w-4 h-4" /> },
@@ -103,24 +103,19 @@ function mergeChecklistPatch(rows, code, patch) {
 }
 
 function normalizeDomains(rawValue) {
-  const rawArray = Array.isArray(rawValue?.domains)
-    ? rawValue.domains
-    : rawValue?.domain
-      ? [rawValue.domain]
-      : [];
-
-  const normalized = rawArray
-    .map((x) => String(x ?? "").trim().toLowerCase())
-    .filter(Boolean);
-
-  return normalized.length ? normalized : DEFAULT_ALLOWED_DOMAINS;
+  return DEFAULT_ALLOWED_DOMAINS;
 }
 
 function isAllowedDomain(session, domains) {
   if (!session?.user?.email) return true;
   const email = String(session.user.email ?? "").trim().toLowerCase();
-  const safeDomains = Array.isArray(domains) ? domains : DEFAULT_ALLOWED_DOMAINS;
-  return safeDomains.some((domain) => email.endsWith(`@${domain}`));
+  const allowed = Array.isArray(domains) ? domains : DEFAULT_ALLOWED_DOMAINS;
+  return allowed.some((value) => {
+    const normalized = safeStr(value).trim().toLowerCase();
+    if (!normalized) return false;
+    if (normalized.includes("@")) return email === normalized;
+    return email.endsWith(`@${normalized}`);
+  });
 }
 
 function isAdminMenuKey(key) {
@@ -134,36 +129,13 @@ function withTimeout(promise, ms, fallbackValue) {
   ]);
 }
 
-function cleanupSupabaseStorage() {
+function cleanupAppSessionStorage() {
   try {
-    const localKeys = Object.keys(localStorage);
-    for (const k of localKeys) {
-      const lower = k.toLowerCase();
-
-      if (
-        lower.includes("supabase") ||
-        lower.includes("-auth-token") ||
-        LEGACY_AUTH_KEYS.includes(k) ||
-        k === SESSION_LOGIN_AT_KEY
-      ) {
-        localStorage.removeItem(k);
-      }
-    }
+    localStorage.removeItem(SESSION_LOGIN_AT_KEY);
   } catch {}
 
   try {
-    const sessionKeys = Object.keys(sessionStorage);
-    for (const k of sessionKeys) {
-      const lower = k.toLowerCase();
-
-      if (
-        lower.includes("supabase") ||
-        lower.includes("-auth-token") ||
-        LEGACY_AUTH_KEYS.includes(k)
-      ) {
-        sessionStorage.removeItem(k);
-      }
-    }
+    sessionStorage.removeItem(SESSION_LOGIN_AT_KEY);
   } catch {}
 }
 
@@ -256,12 +228,12 @@ function computeEffectiveExpiry(session, sessionTimeoutMinutes) {
 
   const appExpiry = loginAt + sessionTimeoutMinutes * 60 * 1000;
 
-  const supabaseExpiry =
+  const providerExpiry =
     Number.isFinite(session?.expires_at) && session.expires_at > 0
       ? session.expires_at * 1000
       : Number.MAX_SAFE_INTEGER;
 
-  return Math.min(appExpiry, supabaseExpiry);
+  return Math.min(appExpiry, providerExpiry);
 }
 
 function TopBar({ title, subtitle, right }) {
@@ -645,17 +617,15 @@ export default function App({ embeddedContext } = {}) {
   const [activeStep, setActiveStep] = useState(() => getStoredActiveStep());
 
   const [checklistItems, setChecklistItems] = useState([]);
-  const [checklistStandard, setChecklistStandard] = useState(null);
-  const [checklistStandardLoading, setChecklistStandardLoading] = useState(true);
+  const [checklistStandard, setChecklistStandard] = useState("ISMS");
   const [checklistReloadKey, setChecklistReloadKey] = useState(0);
   const [adminReloadKey, setAdminReloadKey] = useState(0);
   const [risks, setRisks] = useState([]);
 
   const visibleChecklistItems = useMemo(() => {
-    if (checklistStandardLoading) return [];
     if (!checklistStandard || checklistStandard === "전체") return checklistItems;
     return checklistItems.filter((row) => normalizeChecklistType(row?.type) === checklistStandard);
-  }, [checklistItems, checklistStandard, checklistStandardLoading]);
+  }, [checklistItems, checklistStandard]);
 
   const totalChecklistCount = visibleChecklistItems.length;
   const statusDoneCount = useMemo(
@@ -738,21 +708,16 @@ export default function App({ embeddedContext } = {}) {
 
   useEffect(() => {
     let mounted = true;
-    setChecklistStandardLoading(true);
 
     (async () => {
       try {
-        const standard = await fetchChecklistStandard();
+        const standard = await withTimeout(fetchChecklistStandard(), 1500, "ISMS");
         if (!mounted) return;
-        setChecklistStandard(standard);
+        setChecklistStandard(standard || "ISMS");
       } catch (e) {
         console.error("Checklist standard load error:", e);
         if (!mounted) return;
         setChecklistStandard("ISMS");
-      } finally {
-        if (mounted) {
-          setChecklistStandardLoading(false);
-        }
       }
     })();
 
@@ -764,7 +729,7 @@ export default function App({ embeddedContext } = {}) {
   const loadAllowedDomains = useCallback(async () => {
     try {
       const { data, error } = await withTimeout(
-        supabase
+        firebaseBackend
           .from("security_settings")
           .select("value")
           .eq("key", "allowed_domain")
@@ -788,7 +753,7 @@ export default function App({ embeddedContext } = {}) {
   const loadSessionTimeoutMinutes = useCallback(async () => {
     try {
       const { data, error } = await withTimeout(
-        supabase
+        firebaseBackend
           .from("security_settings")
           .select("value")
           .eq("key", "session_timeout_minutes")
@@ -861,14 +826,14 @@ export default function App({ embeddedContext } = {}) {
     }
 
     try {
-      await supabase.auth.signOut({ scope: "local" });
+      await firebaseBackend.auth.signOut({ scope: "local" });
     } catch (e) {
       console.error("signOut error:", e);
     }
 
     clearStoredLoginAt();
     clearStoredActiveStep();
-    cleanupSupabaseStorage();
+    cleanupAppSessionStorage();
     setSession(null);
     setRole("viewer");
     setAuthLoading(false);
@@ -886,7 +851,7 @@ export default function App({ embeddedContext } = {}) {
     const timeoutMinutes = await loadSessionTimeoutMinutes();
     setSessionTimeoutMinutes(timeoutMinutes);
 
-    const { data, error } = await supabase.auth.refreshSession();
+    const { data, error } = await firebaseBackend.auth.refreshSession();
 
     if (error) {
       console.error("refreshSession error:", error);
@@ -959,14 +924,14 @@ export default function App({ embeddedContext } = {}) {
         setSessionTimeoutMinutes(timeoutMinutes);
 
         let result = await withTimeout(
-          supabase.auth.getSession(),
+          firebaseBackend.auth.getSession(),
           AUTH_INIT_TIMEOUT_MS,
           { __timedOut: true }
         );
 
         if (result?.__timedOut) {
           result = await withTimeout(
-            supabase.auth.getSession(),
+            firebaseBackend.auth.getSession(),
             AUTH_INIT_RETRY_TIMEOUT_MS,
             { data: { session: null }, error: null }
           );
@@ -1008,7 +973,7 @@ export default function App({ embeddedContext } = {}) {
 
     bootstrap();
 
-    const { data: sub } = supabase.auth.onAuthStateChange(async (event, newSession) => {
+    const { data: sub } = firebaseBackend.auth.onAuthStateChange(async (event, newSession) => {
       if (!mounted) return;
 
       try {
@@ -1098,7 +1063,7 @@ export default function App({ embeddedContext } = {}) {
       const timeoutMinutes = await loadSessionTimeoutMinutes();
       setSessionTimeoutMinutes(timeoutMinutes);
 
-      const { data } = await supabase.auth.getSession();
+      const { data } = await firebaseBackend.auth.getSession();
       const currentSession = data?.session ?? null;
 
       if (!currentSession) {
@@ -1202,14 +1167,6 @@ export default function App({ embeddedContext } = {}) {
 
   if (!session) {
     return <LoginPage />;
-  }
-
-  if (checklistStandardLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center text-slate-600">
-        보안 설정을 불러오는 중...
-      </div>
-    );
   }
 
   const effectiveExpiry = computeEffectiveExpiry(session, sessionTimeoutMinutes);

@@ -3,7 +3,7 @@ import { Download, Upload } from "lucide-react";
 import Papa from "papaparse";
 import Button from "../ui/Button";
 import { fetchChecklistRows } from "../api/checklist";
-import { supabase } from "../lib/supabaseClient";
+import { firebaseBackend } from "../lib/firebaseClient";
 import TopProgressBar from "./TopProgressBar";
 
 const PAGE_SIZE = 20;
@@ -251,7 +251,7 @@ export default function ChecklistPanel({
 
   async function exportCsv() {
     try {
-      const { data, error } = await supabase.from("checklist").select("*").order("code", { ascending: true });
+      const { data, error } = await firebaseBackend.from("checklist").select("*").order("code", { ascending: true });
       if (error) {
         console.error("CSV export error:", error);
         alert(`CSV export error: ${error.message}`);
@@ -337,7 +337,7 @@ export default function ChecklistPanel({
     const BATCH = 500;
     for (let i = 0; i < rowsToUpsert.length; i += BATCH) {
       const chunk = rowsToUpsert.slice(i, i + BATCH);
-      const { error } = await supabase.from("checklist").upsert(chunk, { onConflict: "code" });
+      const { error } = await firebaseBackend.from("checklist").upsert(chunk, { onConflict: "code" });
       if (error) throw error;
     }
   }

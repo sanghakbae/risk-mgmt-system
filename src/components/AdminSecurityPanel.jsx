@@ -3,7 +3,7 @@ import Button from "../ui/Button";
 import { fetchSecuritySettings, upsertSecuritySetting, writeAuditLog } from "../api/admin";
 import { ACCEPTANCE_THRESHOLD_OPTIONS } from "../utils/riskPolicy";
 
-const DEFAULT_ALLOWED_DOMAINS = ["muhayu.com"];
+const DEFAULT_ALLOWED_EMAILS = ["totoriverce@gmail.com"];
 const DEFAULT_SESSION_TIMEOUT_MINUTES = 60;
 const MIN_SESSION_TIMEOUT_MINUTES = 1;
 const MAX_SESSION_TIMEOUT_MINUTES = 1440;
@@ -100,7 +100,7 @@ export default function AdminSecurityPanel({ session, reloadKey, onChanged, canM
   const [savingKey, setSavingKey] = useState("");
   const [error, setError] = useState("");
 
-  const [allowedDomainsText, setAllowedDomainsText] = useState(DEFAULT_ALLOWED_DOMAINS.join(", "));
+  const [allowedDomainsText, setAllowedDomainsText] = useState(DEFAULT_ALLOWED_EMAILS.join(", "));
   const [sessionTimeoutMinutes, setSessionTimeoutMinutes] = useState(DEFAULT_SESSION_TIMEOUT_MINUTES);
   const [logRetentionDays, setLogRetentionDays] = useState(DEFAULT_LOG_RETENTION_DAYS);
   const [selectedStandard, setSelectedStandard] = useState("ISMS");
@@ -129,7 +129,7 @@ export default function AdminSecurityPanel({ session, reloadKey, onChanged, canM
           ? rawAllowed.domains
           : rawAllowed?.domain
             ? [rawAllowed.domain]
-            : DEFAULT_ALLOWED_DOMAINS;
+            : DEFAULT_ALLOWED_EMAILS;
 
         setAllowedDomainsText(
           domains
@@ -224,19 +224,14 @@ export default function AdminSecurityPanel({ session, reloadKey, onChanged, canM
     const domains = normalizeDomainsInput(allowedDomainsText);
 
     if (domains.length === 0) {
-      alert("허용 이메일 도메인을 1개 이상 입력해야 합니다.");
-      return;
-    }
-
-    if (domains.length !== 1 || domains[0] !== "muhayu.com") {
-      alert("현재는 muhayu.com 도메인만 허용됩니다.");
+      alert("허용 이메일을 입력해야 합니다.");
       return;
     }
 
     await saveSetting(
       "allowed_domain",
       { domains },
-      "허용 이메일 도메인 목록"
+      "허용 이메일 목록"
     );
   }
 
@@ -354,15 +349,15 @@ export default function AdminSecurityPanel({ session, reloadKey, onChanged, canM
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
         <div className={cardClass()}>
-          <div className="text-sm font-semibold text-slate-900">허용 이메일 도메인</div>
-          <div className="text-xs text-slate-500 mt-1">기본 정책: muhayu.com만 허용</div>
+          <div className="text-sm font-semibold text-slate-900">허용 이메일</div>
+          <div className="text-xs text-slate-500 mt-1">기본 정책: totoriverce@gmail.com만 허용</div>
 
           <div className="mt-4 flex gap-2">
             <input
               className="flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-slate-400"
               value={allowedDomainsText}
               onChange={(e) => setAllowedDomainsText(e.target.value)}
-              placeholder="muhayu.com"
+              placeholder="totoriverce@gmail.com"
               disabled={!canManage}
             />
             <Button
@@ -374,7 +369,7 @@ export default function AdminSecurityPanel({ session, reloadKey, onChanged, canM
           </div>
 
           <div className="mt-2 text-xs text-slate-500">
-            예: <span className="font-medium">muhayu.com</span>
+            예: <span className="font-medium">totoriverce@gmail.com</span>
           </div>
         </div>
 

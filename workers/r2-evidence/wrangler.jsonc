@@ -1,0 +1,11 @@
+{
+  "name": "risk-assessment-r2-evidence",
+  "main": "src/index.js",
+  "compatibility_date": "2026-06-07",
+  "r2_buckets": [
+    {
+      "binding": "EVIDENCE_BUCKET",
+      "bucket_name": "risk-assessment-mgmt-system"
+    }
+  ]
+}

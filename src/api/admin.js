@@ -1,4 +1,4 @@
-import { supabase } from "../lib/supabaseClient";
+import { firebaseBackend } from "../lib/firebaseClient";
 
 function normalizeRole(role) {
   return role === "admin" ? "admin" : "viewer";
@@ -28,7 +28,7 @@ export async function syncMyProfile(user) {
     updated_at: new Date().toISOString(),
   };
 
-  const { data, error } = await supabase
+  const { data, error } = await firebaseBackend
     .from("profiles")
     .upsert(payload, { onConflict: "user_id" })
     .select()
@@ -39,7 +39,7 @@ export async function syncMyProfile(user) {
 }
 
 export async function fetchMyRole() {
-  const { data, error } = await supabase.rpc("my_role");
+  const { data, error } = await firebaseBackend.rpc("my_role");
 
   if (error) {
     console.error("fetchMyRole error:", error);
@@ -50,7 +50,7 @@ export async function fetchMyRole() {
 }
 
 export async function fetchSecuritySettings() {
-  const { data, error } = await supabase
+  const { data, error } = await firebaseBackend
     .from("security_settings")
     .select("key, value, description, updated_at, updated_by")
     .order("key", { ascending: true });
@@ -60,7 +60,7 @@ export async function fetchSecuritySettings() {
 }
 
 export async function fetchRiskEvaluationPolicy() {
-  const { data, error } = await supabase
+  const { data, error } = await firebaseBackend
     .from("security_settings")
     .select("value")
     .eq("key", "risk_evaluation_policy")
@@ -71,7 +71,7 @@ export async function fetchRiskEvaluationPolicy() {
 }
 
 export async function fetchChecklistStandard() {
-  const { data, error } = await supabase
+  const { data, error } = await firebaseBackend
     .from("security_settings")
     .select("value")
     .eq("key", "risk_evaluation_policy")
@@ -84,7 +84,7 @@ export async function fetchChecklistStandard() {
     return normalizeChecklistStandardValue(policyStandard);
   }
 
-  const { data: legacyData, error: legacyError } = await supabase
+  const { data: legacyData, error: legacyError } = await firebaseBackend
     .from("security_settings")
     .select("value")
     .eq("key", "checklist_standard")
@@ -103,7 +103,7 @@ export async function upsertSecuritySetting({ key, value, description, updatedBy
     updated_at: new Date().toISOString(),
   };
 
-  const { data, error } = await supabase
+  const { data, error } = await firebaseBackend
     .from("security_settings")
     .upsert(payload, { onConflict: "key" })
     .select()
@@ -114,7 +114,7 @@ export async function upsertSecuritySetting({ key, value, description, updatedBy
 }
 
 export async function fetchAuditLogs({ limit = 30, action = "", actorEmail = "" } = {}) {
-  let q = supabase
+  let q = firebaseBackend
     .from("audit_logs")
     .select("id, actor_user_id, actor_email, action, target_type, target_id, detail, created_at")
     .order("created_at", { ascending: false })
@@ -151,12 +151,12 @@ export async function writeAuditLog({
     detail,
   };
 
-  const { error } = await supabase.from("audit_logs").insert(payload);
+  const { error } = await firebaseBackend.from("audit_logs").insert(payload);
   if (error) throw error;
 }
 
 export async function fetchProfiles(limit = 50) {
-  const { data, error } = await supabase
+  const { data, error } = await firebaseBackend
     .from("profiles")
     .select("user_id, email, display_name, avatar_url, last_sign_in_at, created_at, updated_at")
     .order("updated_at", { ascending: false })
@@ -167,7 +167,7 @@ export async function fetchProfiles(limit = 50) {
 }
 
 export async function fetchUserRoles() {
-  const { data, error } = await supabase
+  const { data, error } = await firebaseBackend
     .from("user_roles")
     .select("user_id, role, created_at, updated_at")
     .order("created_at", { ascending: true });
@@ -186,7 +186,7 @@ export async function upsertUserRole({ userId, role }) {
     updated_at: new Date().toISOString(),
   };
 
-  const { data, error } = await supabase
+  const { data, error } = await firebaseBackend
     .from("user_roles")
     .upsert(payload, { onConflict: "user_id" })
     .select()
@@ -197,14 +197,14 @@ export async function upsertUserRole({ userId, role }) {
 }
 
 export async function deleteManagedUser(userId) {
-  const { error: roleError } = await supabase
+  const { error: roleError } = await firebaseBackend
     .from("user_roles")
     .delete()
     .eq("user_id", userId);
 
   if (roleError) throw roleError;
 
-  const { error: profileError } = await supabase
+  const { error: profileError } = await firebaseBackend
     .from("profiles")
     .delete()
     .eq("user_id", userId);

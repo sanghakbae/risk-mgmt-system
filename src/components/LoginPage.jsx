@@ -1,16 +1,15 @@
 import React, { useEffect, useState } from "react";
-import { supabase } from "../lib/supabaseClient";
+import { firebaseBackend } from "../lib/firebaseClient";
 
-const DEFAULT_ALLOWED_DOMAINS = ["muhayu.com"];
+const DEFAULT_ALLOWED_EMAILS = ["totoriverce@gmail.com"];
 
 export default function LoginPage() {
   const [loading, setLoading] = useState(false);
-  const [allowedDomains, setAllowedDomains] = useState(DEFAULT_ALLOWED_DOMAINS);
 
   useEffect(() => {
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((event) => {
+    } = firebaseBackend.auth.onAuthStateChange((event) => {
       if (event === "SIGNED_IN" || event === "SIGNED_OUT") {
         setLoading(false);
       }
@@ -21,47 +20,11 @@ export default function LoginPage() {
     };
   }, []);
 
-  useEffect(() => {
-    let mounted = true;
-
-    (async () => {
-      try {
-        const { data, error } = await supabase
-          .from("security_settings")
-          .select("value")
-          .eq("key", "allowed_domain")
-          .maybeSingle();
-
-        if (error) throw error;
-
-        const domains = Array.isArray(data?.value?.domains)
-          ? data.value.domains
-          : data?.value?.domain
-            ? [data.value.domain]
-            : DEFAULT_ALLOWED_DOMAINS;
-
-        if (!mounted) return;
-
-        const normalized = domains
-          .map((x) => String(x ?? "").trim().toLowerCase())
-          .filter(Boolean);
-
-        setAllowedDomains(normalized.length ? normalized : DEFAULT_ALLOWED_DOMAINS);
-      } catch (e) {
-        console.error("allowed_domain load error:", e);
-      }
-    })();
-
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
   async function handleGoogleLogin() {
     try {
       setLoading(true);
 
-      const { data, error } = await supabase.auth.signInWithOAuth({
+      const { data, error } = await firebaseBackend.auth.signInWithOAuth({
         provider: "google",
         options: {
           redirectTo: window.location.origin,
@@ -111,7 +74,7 @@ export default function LoginPage() {
               <span className="text-slate-300">•</span>
               <span>최소 권한</span>
               <span className="text-slate-300">•</span>
-              <span className="truncate">{allowedDomains.join(", ")}</span>
+              <span className="truncate">{DEFAULT_ALLOWED_EMAILS.join(", ")}</span>
             </div>
           </div>
 

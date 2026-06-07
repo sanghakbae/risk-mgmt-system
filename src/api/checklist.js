@@ -1,4 +1,4 @@
-import { supabase } from "../lib/supabaseClient";
+import { firebaseBackend } from "../lib/firebaseClient";
 
 export const CHECKLIST_SELECT_COLUMNS = [
   "accept_reason",
@@ -35,7 +35,7 @@ export const CHECKLIST_SELECT_COLUMNS = [
 ].join(", ");
 
 export async function fetchChecklistRows() {
-  const { data, error } = await supabase
+  const { data, error } = await firebaseBackend
     .from("checklist")
     .select(CHECKLIST_SELECT_COLUMNS)
     .order("code", { ascending: true });
@@ -46,6 +46,6 @@ export async function fetchChecklistRows() {
 
 /** code 기준 부분 업데이트 */
 export async function updateChecklistByCode(code, fields) {
-  const { error } = await supabase.from("checklist").update(fields).eq("code", code);
+  const { error } = await firebaseBackend.from("checklist").update(fields).eq("code", code);
   if (error) throw error;
 }

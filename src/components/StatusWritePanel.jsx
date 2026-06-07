@@ -1,6 +1,6 @@
 // src/components/StatusWritePanel.jsx
 import React, { useMemo, useState, useEffect, useRef } from "react";
-import { supabase } from "../lib/supabaseClient";
+import { firebaseBackend } from "../lib/firebaseClient";
 import { updateChecklistByCode } from "../api/checklist";
 import Button from "../ui/Button";
 import EvidenceModalTrigger from "./EvidenceModalTrigger";
@@ -74,11 +74,16 @@ function isStatusCompleted(row) {
   return safeStr(row?.status ?? row?.current_status ?? row?.state).trim() !== "";
 }
 
-// Supabase public url에서 bucket 내 object path 뽑기
-// 예: https://xxxx.supabase.co/storage/v1/object/public/evidence/AAA/123_file.png
+// Firebase/S3-style download URL에서 bucket 내 object path 뽑기
 function extractEvidencePathFromPublicUrl(publicUrl) {
   const url = safeStr(publicUrl).trim();
   if (!url) return "";
+
+  const firebaseMatch = url.match(/\/o\/([^?]+)/);
+  if (firebaseMatch?.[1]) {
+    const fullPath = decodeURIComponent(firebaseMatch[1]);
+    if (fullPath.startsWith("evidence/")) return fullPath.slice("evidence/".length);
+  }
 
   const m = url.match(/\/storage\/v1\/object\/public\/evidence\/(.+)$/);
   if (m?.[1]) return decodeURIComponent(m[1]);
@@ -331,7 +336,7 @@ export default function StatusWritePanel({ checklistItems = [], onUpdated }) {
       const safeName = sanitizeFileName(file.name);
       const filePath = `${safeCode}/${Date.now()}_${safeName}`;
 
-      const { error: uploadError } = await supabase.storage.from("evidence").upload(filePath, file, {
+      const { error: uploadError } = await firebaseBackend.storage.from("evidence").upload(filePath, file, {
         upsert: true,
         cacheControl: "3600",
         contentType: file.type || "application/octet-stream",
@@ -339,7 +344,7 @@ export default function StatusWritePanel({ checklistItems = [], onUpdated }) {
 
       if (uploadError) throw new Error("업로드 실패: " + uploadError.message);
 
-      const { data } = supabase.storage.from("evidence").getPublicUrl(filePath);
+      const { data } = firebaseBackend.storage.from("evidence").getPublicUrl(filePath);
       const url = data?.publicUrl || "";
       if (!url) throw new Error("업로드는 성공했지만 public URL 생성 실패");
       uploadedUrls.push(url);
@@ -396,7 +401,7 @@ export default function StatusWritePanel({ checklistItems = [], onUpdated }) {
       const path = extractEvidencePathFromPublicUrl(url);
 
       if (path) {
-        const { error: rmErr } = await supabase.storage.from("evidence").remove([path]);
+        const { error: rmErr } = await firebaseBackend.storage.from("evidence").remove([path]);
         if (rmErr) throw new Error("스토리지 삭제 실패: " + rmErr.message);
       }
 

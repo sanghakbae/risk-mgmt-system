@@ -162,7 +162,7 @@ export default function AdminAccessPanel({ session, reloadKey, onChanged, canMan
     }
 
     const confirmed = window.confirm(
-      `${targetEmail} 계정의 앱 접근 권한과 사용자 정보를 삭제하시겠습니까?\n실제 Google/Supabase 계정은 삭제되지 않습니다.`
+      `${targetEmail} 계정의 앱 접근 권한과 사용자 정보를 삭제하시겠습니까?\n실제 Google 계정은 삭제되지 않습니다.`
     );
 
     if (!confirmed) return;
