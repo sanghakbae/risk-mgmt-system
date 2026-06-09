@@ -12,33 +12,37 @@ function withTimeout(promise, ms, fallbackValue = null) {
   ]);
 }
 
-async function bootstrap() {
-  try {
-    if (window.location.hostname === "127.0.0.1") {
-      const nextUrl = new URL(window.location.href);
-      nextUrl.hostname = "localhost";
-      window.location.replace(nextUrl.toString());
-      return;
-    }
-
-    const result = await withTimeout(
-      firebaseBackend.auth.exchangeCodeForSession(),
-      4000,
-      { error: new Error("exchange timeout") }
-    );
-
-    if (result?.error) {
-      console.error("Firebase auth redirect result failed:", result.error);
-    }
-  } catch (e) {
-    console.error("Firebase auth bootstrap error:", e);
+function bootstrap() {
+  if (window.location.hostname === "127.0.0.1") {
+    const nextUrl = new URL(window.location.href);
+    nextUrl.hostname = "localhost";
+    window.location.replace(nextUrl.toString());
+    return;
   }
 
+  // Render immediately so the UI never waits on a network round-trip.
+  // App handles auth state itself via getSession()/onAuthStateChange.
   ReactDOM.createRoot(document.getElementById("root")).render(
     <HashRouter>
       <App />
     </HashRouter>
   );
+
+  // Process any OAuth redirect result in the background; the resulting
+  // session is picked up by App's onAuthStateChange subscription.
+  withTimeout(
+    firebaseBackend.auth.exchangeCodeForSession(),
+    4000,
+    { error: new Error("exchange timeout") }
+  )
+    .then((result) => {
+      if (result?.error) {
+        console.error("Firebase auth redirect result failed:", result.error);
+      }
+    })
+    .catch((e) => {
+      console.error("Firebase auth bootstrap error:", e);
+    });
 }
 
 bootstrap();
