@@ -1171,7 +1171,9 @@ export default function App({ embeddedContext } = {}) {
 
   const effectiveExpiry = computeEffectiveExpiry(session, sessionTimeoutMinutes);
   const remainMs = effectiveExpiry ? Math.max(0, effectiveExpiry - clockNow) : 0;
-  const remainMin = Math.ceil(remainMs / 60000);
+  // Cap at the configured timeout: loginAt can sit a fraction ahead of clockNow
+  // right after login, which would otherwise round 60min up to 61 via ceil.
+  const remainMin = Math.min(sessionTimeoutMinutes, Math.ceil(remainMs / 60000));
 
 
 
