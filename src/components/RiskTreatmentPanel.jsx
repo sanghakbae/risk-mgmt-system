@@ -139,37 +139,37 @@ function StrategyGuide({ policy }) {
 
       {expanded ? (
         <>
-          <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
-              <div className="text-sm font-semibold text-emerald-900">수용 (Accept)</div>
-              <ul className="text-xs text-emerald-900 mt-1 space-y-1 list-disc pl-4">
+          <div className="mt-2 grid grid-cols-2 gap-1.5 md:mt-3 md:gap-3">
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-2 md:rounded-xl md:p-3">
+              <div className="text-[10px] font-semibold text-emerald-900 md:text-sm">수용 (Accept)</div>
+              <ul className="mt-1 list-disc space-y-0.5 pl-3 text-[9px] leading-[1.25] text-emerald-900 md:space-y-1 md:pl-4 md:text-xs">
                 <li>위험을 현재 상태로 유지</li>
                 <li>개선이 어렵거나 비용 대비 효과가 낮을 때</li>
                 <li>수용 사유 기록 권장</li>
               </ul>
             </div>
 
-            <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
-              <div className="text-sm font-semibold text-amber-900">감소 (Mitigate)</div>
-              <ul className="text-xs text-amber-900 mt-1 space-y-1 list-disc pl-4">
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-2 md:rounded-xl md:p-3">
+              <div className="text-[10px] font-semibold text-amber-900 md:text-sm">감소 (Mitigate)</div>
+              <ul className="mt-1 list-disc space-y-0.5 pl-3 text-[9px] leading-[1.25] text-amber-900 md:space-y-1 md:pl-4 md:text-xs">
                 <li>보안 통제로 위험 감소</li>
                 <li>가장 일반적인 대응 전략</li>
                 <li>예: 패치, 설정 변경, 접근통제</li>
               </ul>
             </div>
 
-            <div className="rounded-xl border border-rose-200 bg-rose-50 p-3">
-              <div className="text-sm font-semibold text-rose-900">회피 (Avoid)</div>
-              <ul className="text-xs text-rose-900 mt-1 space-y-1 list-disc pl-4">
+            <div className="rounded-lg border border-rose-200 bg-rose-50 p-2 md:rounded-xl md:p-3">
+              <div className="text-[10px] font-semibold text-rose-900 md:text-sm">회피 (Avoid)</div>
+              <ul className="mt-1 list-disc space-y-0.5 pl-3 text-[9px] leading-[1.25] text-rose-900 md:space-y-1 md:pl-4 md:text-xs">
                 <li>위험이 발생하는 기능 제거</li>
                 <li>High 위험 또는 규제 대응 시</li>
                 <li>예: 기능 비활성화, 서비스 중단</li>
               </ul>
             </div>
 
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-              <div className="text-sm font-semibold text-slate-900">전가 (Transfer)</div>
-              <ul className="text-xs text-slate-700 mt-1 space-y-1 list-disc pl-4">
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-2 md:rounded-xl md:p-3">
+              <div className="text-[10px] font-semibold text-slate-900 md:text-sm">전가 (Transfer)</div>
+              <ul className="mt-1 list-disc space-y-0.5 pl-3 text-[9px] leading-[1.25] text-slate-700 md:space-y-1 md:pl-4 md:text-xs">
                 <li>위험을 제3자에게 이전</li>
                 <li>책임은 계약으로 관리</li>
                 <li>예: 외주 운영, 보안관제, 보험</li>
@@ -210,7 +210,7 @@ function StatPill({ label, value, tone = "slate" }) {
 }
 
 const FILTER_CONTROL_CLASS =
-  "h-10 w-full rounded-xl border border-slate-200 px-3 text-sm leading-5 bg-white";
+  "h-6 w-full rounded-lg border border-slate-200 px-1 text-[9px] leading-4 bg-white md:h-10 md:rounded-xl md:px-3 md:text-sm md:leading-5";
 
 function autoResize(el) {
   if (!el) return;
@@ -655,16 +655,16 @@ export default function RiskTreatmentPanel({
 
           <ProgressBar done={doneCount} total={targets.length} />
 
-          <div className="panel-filter-card rounded-2xl border border-slate-200 bg-white p-4">
-            <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div className="panel-filter-card rounded-2xl border border-slate-200 bg-white p-2 md:p-4">
+            <div className="flex items-start justify-between gap-2 flex-wrap md:gap-3">
               <div>
-                <div className="text-sm font-semibold text-slate-900">취약 항목 대응 계획 관리</div>
-                <div className="text-xs text-slate-500 mt-1">
+                <div className="text-[10px] font-semibold text-slate-900 md:text-sm">취약 항목 대응 계획 관리</div>
+                <div className="mt-0.5 text-[9px] text-slate-500 md:mt-1 md:text-xs">
                   필터/검색으로 우선순위를 정리하고, 처리 계획/담당/기한/상태를 기록하세요.
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-1 flex-wrap md:gap-2">
                 <StatPill label="TOTAL" value={summary.total} tone="slate" />
                 <StatPill label="HIGH" value={summary.high} tone="rose" />
                 <StatPill label="MED" value={summary.med} tone="amber" />
@@ -673,9 +673,9 @@ export default function RiskTreatmentPanel({
               </div>
             </div>
 
-            <div className="mt-4 grid grid-cols-1 lg:grid-cols-12 gap-3">
-              <div className="lg:col-span-4">
-                <div className="text-xs font-semibold text-slate-700 mb-1">검색</div>
+            <div className="mt-2 grid grid-cols-[1.25fr_0.75fr_0.8fr_0.8fr_1fr] gap-1 md:mt-4 lg:grid-cols-12 md:gap-3">
+              <div className="min-w-0 lg:col-span-4">
+                <div className="mb-0.5 text-[9px] font-semibold text-slate-700 md:mb-1 md:text-xs">검색</div>
                 <input
                   value={q}
                   onChange={(e) => setQ(e.target.value)}
@@ -684,8 +684,8 @@ export default function RiskTreatmentPanel({
                 />
               </div>
 
-              <div className="lg:col-span-2">
-                <div className="text-xs font-semibold text-slate-700 mb-1">Risk</div>
+              <div className="min-w-0 lg:col-span-2">
+                <div className="mb-0.5 text-[9px] font-semibold text-slate-700 md:mb-1 md:text-xs">Risk</div>
                 <select
                   value={riskF}
                   onChange={(e) => setRiskF(e.target.value)}
@@ -698,8 +698,8 @@ export default function RiskTreatmentPanel({
                 </select>
               </div>
 
-              <div className="lg:col-span-2">
-                <div className="text-xs font-semibold text-slate-700 mb-1">전략</div>
+              <div className="min-w-0 lg:col-span-2">
+                <div className="mb-0.5 text-[9px] font-semibold text-slate-700 md:mb-1 md:text-xs">전략</div>
                 <select
                   value={strategyF}
                   onChange={(e) => setStrategyF(e.target.value)}
@@ -713,8 +713,8 @@ export default function RiskTreatmentPanel({
                 </select>
               </div>
 
-              <div className="lg:col-span-2">
-                <div className="text-xs font-semibold text-slate-700 mb-1">상태</div>
+              <div className="min-w-0 lg:col-span-2">
+                <div className="mb-0.5 text-[9px] font-semibold text-slate-700 md:mb-1 md:text-xs">상태</div>
                 <select
                   value={statusF}
                   onChange={(e) => setStatusF(e.target.value)}
@@ -729,8 +729,8 @@ export default function RiskTreatmentPanel({
                 </select>
               </div>
 
-              <div className="lg:col-span-2">
-                <div className="text-xs font-semibold text-slate-700 mb-1">정렬</div>
+              <div className="min-w-0 lg:col-span-2">
+                <div className="mb-0.5 text-[9px] font-semibold text-slate-700 md:mb-1 md:text-xs">정렬</div>
                 <select
                   value={sortKey}
                   onChange={(e) => setSortKey(e.target.value)}
@@ -744,7 +744,7 @@ export default function RiskTreatmentPanel({
               </div>
             </div>
 
-            <div className="mt-3 text-xs text-slate-500">
+            <div className="mt-2 text-[9px] text-slate-500 md:mt-3 md:text-xs">
               표시 중: <span className="font-semibold text-slate-700">{filtered.length}</span> / {targets.length}
             </div>
           </div>

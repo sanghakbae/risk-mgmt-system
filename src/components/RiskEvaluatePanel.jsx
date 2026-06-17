@@ -593,8 +593,8 @@ export default function RiskEvaluatePanel({ checklistItems = [], onUpdated }) {
           />
         </div>
 
-        <div className="panel-filter-card rounded-2xl border border-slate-200 bg-white p-4">
-          <div className="flex items-center gap-2 flex-wrap">
+        <div className="panel-filter-card rounded-2xl border border-slate-200 bg-white p-2 md:p-4">
+          <div className="grid grid-cols-[0.75fr_0.95fr_1fr_0.9fr_1.25fr] items-center gap-1 md:flex md:flex-wrap md:gap-2">
             <select
               value={typeFilter}
               onChange={(e) => {
@@ -602,7 +602,7 @@ export default function RiskEvaluatePanel({ checklistItems = [], onUpdated }) {
                 setAreaFilter("전체");
                 setDomainFilter("전체");
               }}
-              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
+              className="min-w-0 rounded-lg border border-slate-200 bg-white px-1 py-1 text-[9px] outline-none focus:ring-2 focus:ring-slate-200 md:rounded-xl md:px-3 md:py-2 md:text-sm"
             >
               {typeOptions.map((t) => (
                 <option key={t} value={t}>
@@ -617,7 +617,7 @@ export default function RiskEvaluatePanel({ checklistItems = [], onUpdated }) {
                 setAreaFilter(e.target.value);
                 setDomainFilter("전체");
               }}
-              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
+              className="min-w-0 rounded-lg border border-slate-200 bg-white px-1 py-1 text-[9px] outline-none focus:ring-2 focus:ring-slate-200 md:rounded-xl md:px-3 md:py-2 md:text-sm"
             >
               {areaOptions.map((a) => (
                 <option key={a} value={a}>
@@ -629,7 +629,7 @@ export default function RiskEvaluatePanel({ checklistItems = [], onUpdated }) {
             <select
               value={domainFilter}
               onChange={(e) => setDomainFilter(e.target.value)}
-              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
+              className="min-w-0 rounded-lg border border-slate-200 bg-white px-1 py-1 text-[9px] outline-none focus:ring-2 focus:ring-slate-200 md:rounded-xl md:px-3 md:py-2 md:text-sm"
             >
               {domainOptions.map((d) => (
                 <option key={d} value={d}>
@@ -641,7 +641,7 @@ export default function RiskEvaluatePanel({ checklistItems = [], onUpdated }) {
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
+              className="min-w-0 rounded-lg border border-slate-200 bg-white px-1 py-1 text-[9px] outline-none focus:ring-2 focus:ring-slate-200 md:rounded-xl md:px-3 md:py-2 md:text-sm"
             >
               <option value="전체">Risk(전체)</option>
               <option value="입력됨">Risk(입력됨)</option>
@@ -651,11 +651,11 @@ export default function RiskEvaluatePanel({ checklistItems = [], onUpdated }) {
             <input
               value={keyword}
               onChange={(e) => setKeyword(e.target.value)}
-              className="min-w-[240px] flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
+              className="min-w-0 rounded-lg border border-slate-200 bg-white px-1 py-1 text-[9px] outline-none placeholder:text-[9px] focus:ring-2 focus:ring-slate-200 md:min-w-[240px] md:flex-1 md:rounded-xl md:px-3 md:py-2 md:text-sm"
               placeholder="검색(코드/항목/현황/사유/도메인/영역/증적)"
             />
 
-            <div className="text-sm text-slate-600 ml-auto">
+            <div className="col-span-5 text-[9px] text-slate-600 md:col-span-1 md:ml-auto md:text-sm">
               표시 {filtered.length}건 · {pageSafe}/{totalPages} 페이지
             </div>
           </div>

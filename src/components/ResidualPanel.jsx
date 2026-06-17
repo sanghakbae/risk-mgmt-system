@@ -156,38 +156,38 @@ function RiskMatrixMini({ policy }) {
   }
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4">
-      <div className="text-sm font-bold text-slate-900 mb-3">정성적 위험분석 행렬</div>
+    <div className="rounded-2xl border border-slate-200 bg-white p-2 md:p-4">
+      <div className="mb-2 text-[10px] font-bold text-slate-900 md:mb-3 md:text-sm">정성적 위험분석 행렬</div>
 
-      <div className="grid grid-cols-[132px_1fr] gap-3">
+      <div className="grid grid-cols-[86px_1fr] gap-1.5 md:grid-cols-[132px_1fr] md:gap-3">
         <div />
-        <div className="grid grid-cols-3 text-xs font-semibold text-slate-700">
+        <div className="grid grid-cols-3 text-[8px] font-semibold text-slate-700 md:text-xs">
           <div className="text-center">Low</div>
           <div className="text-center">Medium</div>
           <div className="text-center">High</div>
         </div>
 
-        <div className="space-y-2 text-xs font-semibold text-slate-700">
-          <div className="h-10 flex items-center justify-end pr-2">Highly Likely</div>
-          <div className="h-10 flex items-center justify-end pr-2">Likely</div>
-          <div className="h-10 flex items-center justify-end pr-2">Unlikely</div>
+        <div className="space-y-1 text-[8px] font-semibold text-slate-700 md:space-y-2 md:text-xs">
+          <div className="flex h-7 items-center justify-end pr-1 md:h-10 md:pr-2">Highly Likely</div>
+          <div className="flex h-7 items-center justify-end pr-1 md:h-10 md:pr-2">Likely</div>
+          <div className="flex h-7 items-center justify-end pr-1 md:h-10 md:pr-2">Unlikely</div>
         </div>
 
-        <div className="grid grid-rows-3 gap-2">
+        <div className="grid grid-rows-3 gap-1 md:gap-2">
           {cells.map((row, rIdx) => (
-            <div key={rIdx} className="grid grid-cols-3 gap-2">
+            <div key={rIdx} className="grid grid-cols-3 gap-1 md:gap-2">
               {row.map((c, cIdx) => {
                 const n = riskNumber(c.l, c.i);
                 return (
                   <div
                     key={`${rIdx}-${cIdx}`}
                     className={[
-                      "h-10 rounded-xl border border-slate-200 flex items-center justify-center",
+                      "flex h-7 items-center justify-center rounded-lg border border-slate-200 md:h-10 md:rounded-xl",
                       cellBg(n),
                     ].join(" ")}
                   >
                     <div className="text-center">
-                      <div className="text-sm font-bold text-slate-900 tabular-nums">{n}</div>
+                      <div className="text-[10px] font-bold text-slate-900 tabular-nums md:text-sm">{n}</div>
                     </div>
                   </div>
                 );
@@ -197,7 +197,7 @@ function RiskMatrixMini({ policy }) {
         </div>
       </div>
 
-      <div className="mt-3 text-right text-xs text-slate-500">
+      <div className="mt-2 text-right text-[8px] text-slate-500 md:mt-3 md:text-xs">
         * {policy?.metricLabel ?? "DoA"} 기준 Risk {policy?.acceptanceThreshold ?? policy?.doaThreshold ?? DEFAULT_DOA_THRESHOLD} 이하 허용 가능
       </div>
     </div>
@@ -589,12 +589,12 @@ export default function ResidualPanel({ checklistItems = [], onUpdated }) {
             <RiskMatrixMini policy={riskPolicyByStandard.ISMS} />
           </div>
 
-          <div className="panel-filter-card rounded-2xl border border-slate-200 bg-white p-4">
-            <div className="flex items-center gap-2 flex-wrap">
+          <div className="panel-filter-card rounded-2xl border border-slate-200 bg-white p-2 md:p-4">
+            <div className="grid grid-cols-[0.9fr_1.25fr_0.9fr_1fr] items-center gap-1 md:flex md:flex-wrap md:gap-2">
               <select
                 value={typeFilter}
                 onChange={(e) => onChangeType(e.target.value)}
-                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-center outline-none focus:ring-2 focus:ring-slate-200 w-[180px]"
+                className="min-w-0 rounded-lg border border-slate-200 bg-white px-1 py-1 text-center text-[9px] outline-none focus:ring-2 focus:ring-slate-200 md:w-[180px] md:rounded-xl md:px-3 md:py-2 md:text-sm"
               >
                 {typeOptions.map((t) => (
                   <option key={t} value={t}>
@@ -607,7 +607,7 @@ export default function ResidualPanel({ checklistItems = [], onUpdated }) {
                 <select
                   value={domainFilter}
                   onChange={(e) => onChangeDomain(e.target.value)}
-                  className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-center outline-none focus:ring-2 focus:ring-slate-200 w-[220px]"
+                  className="min-w-0 rounded-lg border border-slate-200 bg-white px-1 py-1 text-center text-[9px] outline-none focus:ring-2 focus:ring-slate-200 md:w-[220px] md:rounded-xl md:px-3 md:py-2 md:text-sm"
                 >
                   <option value="">분야(전체)</option>
                   {domainOptions.map((d) => (
@@ -622,7 +622,7 @@ export default function ResidualPanel({ checklistItems = [], onUpdated }) {
                 type="button"
                 onClick={onToggleOnlyMitigate}
                 className={[
-                  "px-3 py-2 rounded-xl border text-sm font-semibold",
+                  "rounded-lg border px-1 py-1 text-[9px] font-semibold md:rounded-xl md:px-3 md:py-2 md:text-sm",
                   onlyMitigate
                     ? "bg-slate-900 text-white border-slate-900"
                     : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50",
@@ -631,7 +631,7 @@ export default function ResidualPanel({ checklistItems = [], onUpdated }) {
                 {onlyMitigate ? "감소만" : "전체 보기"}
               </button>
 
-              <div className="text-sm text-slate-600 ml-auto">
+              <div className="text-[9px] text-slate-600 md:ml-auto md:text-sm">
                 표시 {targets.length}건 · {pageSafe}/{totalPages} 페이지
               </div>
             </div>

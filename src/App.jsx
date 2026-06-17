@@ -25,7 +25,6 @@ import RiskEvaluatePanel from "./components/RiskEvaluatePanel";
 import RiskTreatmentPanel from "./components/RiskTreatmentPanel";
 import ResidualRiskPanel from "./components/ResidualRiskPanel";
 import ApprovePanel from "./components/ApprovePanel";
-import LoginPage from "./components/LoginPage";
 import AdminSecurityPanel from "./components/AdminSecurityPanel";
 import AdminAuditLogsPanel from "./components/AdminAuditLogsPanel";
 import AdminAccessPanel from "./components/AdminAccessPanel";
@@ -59,6 +58,84 @@ const ADMIN_STEPS = [
   { key: "admin_logs", title: "감사 로그", desc: "관리자 작업 이력과 주요 변경 사항을 조회합니다.", sidebarTitle: "Audit Logs", sidebarDesc: "감사 로그 조회", icon: <ScrollText className="w-4 h-4" /> },
   { key: "admin_access", title: "권한 관리", desc: "사용자 역할을 변경하고 접근 권한을 관리합니다.", sidebarTitle: "Access Control", sidebarDesc: "권한 관리", icon: <Users className="w-4 h-4" /> },
 ];
+
+const GUEST_DEMO_DOMAIN_STATS = [
+  ["취약점 점검 및 조치", 4, 3],
+  ["관리체계 점검", 2, 1],
+  ["인식제고 및 교육훈련", 5, 2],
+  ["범위 설정", 3, 1],
+  ["정보자산 식별", 3, 1],
+  ["네트워크 접근", 3, 1],
+  ["로그 및 접속기록 관리", 4, 0],
+  ["보안시스템 운영", 3, 0],
+  ["보조저장매체 관리", 2, 0],
+  ["패치관리", 3, 0],
+  ["정책 수립", 3, 0],
+  ["보안 서약", 2, 0],
+  ["보호구역 지정", 2, 0],
+  ["반출입 기기 통제", 3, 0],
+  ["업무환경 보안", 2, 0],
+  ["정보시스템 접근", 3, 0],
+  ["원격접근 통제", 2, 0],
+  ["암호정책 적용", 2, 0],
+  ["클라우드 보안", 3, 0],
+  ["공개서버 보안", 2, 0],
+  ["업무용 단말기 보안", 3, 0],
+  ["악성코드 통제", 2, 0],
+  ["사고 대응 및 복구", 3, 0],
+  ["외부자 계약 시 보안", 2, 0],
+  ["정보시스템 보호", 3, 0],
+  ["사용자 계정 관리", 3, 0],
+  ["패스워드 관리", 2, 0],
+  ["인터넷 접속 통제", 2, 0],
+  ["보안 요구사항 정의", 3, 0],
+  ["소스 프로그램 관리", 2, 0],
+  ["백업 및 복구관리", 3, 0],
+  ["경영진의 참여", 2, 0],
+  ["최고책임자의 지정", 2, 0],
+  ["운영현황 관리", 3, 0],
+  ["사용자 식별", 2, 0],
+  ["사용자 인증", 3, 0],
+  ["시험과 운영 환경 분리", 2, 0],
+  ["시험 데이터 보안", 2, 0],
+  ["변경관리", 3, 0],
+  ["사고 예방 및 대응체계 구축", 2, 0],
+  ["조직 구성", 2, 0],
+];
+
+function buildGuestDemoChecklistItems() {
+  let codeNo = 1;
+  return GUEST_DEMO_DOMAIN_STATS.flatMap(([domain, total, vulnerable], domainIdx) =>
+    Array.from({ length: total }, (_, itemIdx) => {
+      const isVulnerable = itemIdx < vulnerable;
+      const code = `G.${String(codeNo++).padStart(3, "0")}`;
+      return {
+        id: `guest-${code}`,
+        type: "ISMS",
+        area: domainIdx < 6 ? "관리체계" : "보호대책",
+        domain,
+        code,
+        itemcode: code,
+        guide: `${domain} 점검 기준`,
+        status: "운영 중",
+        result: isVulnerable ? "취약" : "양호",
+        result_detail: isVulnerable
+          ? "게스트 모드 표시용 샘플 취약 항목입니다."
+          : "게스트 모드 표시용 샘플 양호 항목입니다.",
+        likelihood: isVulnerable ? "3" : "1",
+        impact: isVulnerable ? "3" : "1",
+        risk: isVulnerable ? "높음" : "낮음",
+        treatment_strategy: isVulnerable ? "완화" : "수용",
+        treatment_plan: isVulnerable ? "담당자 지정 후 개선 조치 수행" : "",
+        treatment_owner: isVulnerable ? "보안담당자" : "",
+        treatment_status: isVulnerable ? "진행 중" : "완료",
+        residual_likelihood: isVulnerable ? "2" : "1",
+        residual_impact: isVulnerable ? "2" : "1",
+        residual_status: isVulnerable ? "조치 후 재평가 필요" : "수용 가능",
+      };
+    })
+  );
+}
 
 function safeStr(v) {
   return v == null ? "" : String(v);
@@ -222,18 +299,17 @@ function computeEffectiveExpiry(session, sessionTimeoutMinutes) {
   const sessionIssuedAt = getSessionIssuedAtMs(session);
 
   let loginAt = storedLoginAt ?? sessionIssuedAt ?? now;
+  if (sessionIssuedAt && storedLoginAt && storedLoginAt < sessionIssuedAt) {
+    loginAt = sessionIssuedAt;
+    setStoredLoginAt(sessionIssuedAt);
+  }
   if (loginAt > now + 60 * 1000) {
     loginAt = now;
   }
 
   const appExpiry = loginAt + sessionTimeoutMinutes * 60 * 1000;
 
-  const providerExpiry =
-    Number.isFinite(session?.expires_at) && session.expires_at > 0
-      ? session.expires_at * 1000
-      : Number.MAX_SAFE_INTEGER;
-
-  return Math.min(appExpiry, providerExpiry);
+  return appExpiry;
 }
 
 function TopBar({ title, subtitle, right }) {
@@ -483,12 +559,69 @@ function Sidebar({ collapsed, activeKey, onSelect, onToggle, role, stepStates = 
   );
 }
 
-function MobileBottomNav({ activeKey, onSelect, role, stepStates = {} }) {
-  const workflowSteps = STEPS.filter((s) => s.key !== "approve");
-  const groupedSteps = [
-    STEPS.find((s) => s.key === "approve"),
-    ...ADMIN_STEPS,
-  ].filter(Boolean);
+function useIsMobileViewport() {
+  const getMatches = () => {
+    if (typeof window === "undefined") return false;
+    return window.matchMedia("(max-width: 767px)").matches;
+  };
+
+  const [isMobile, setIsMobile] = useState(getMatches);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+
+    const mediaQuery = window.matchMedia("(max-width: 767px)");
+    const handleChange = () => setIsMobile(mediaQuery.matches);
+
+    handleChange();
+    mediaQuery.addEventListener("change", handleChange);
+    return () => mediaQuery.removeEventListener("change", handleChange);
+  }, []);
+
+  return isMobile;
+}
+
+const MOBILE_PRIMARY_STEP_KEYS = ["dashboard", "checklist", "status", "vuln"];
+
+function MobileStepButton({ step, active, locked, onClick, compact = false }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={[
+        "flex items-center justify-center border font-bold transition-colors",
+        compact
+          ? "relative h-14 w-full min-w-0 flex-col gap-0.5 overflow-hidden rounded-lg px-1 text-[10px]"
+          : "h-10 gap-1.5 rounded-full px-2 text-[11px]",
+        locked
+          ? active
+            ? "border-rose-300 bg-rose-100 text-rose-700"
+            : "border-rose-200 bg-white text-rose-700"
+          : active
+            ? "border-slate-950 bg-slate-950 text-white"
+            : "border-slate-200 bg-slate-50 text-slate-700",
+      ].join(" ")}
+    >
+      {compact ? (
+        <span
+          className={[
+            "absolute inset-x-0 top-0 h-1",
+            locked ? "bg-rose-500" : active ? "bg-emerald-500" : "bg-transparent",
+          ].join(" ")}
+        />
+      ) : null}
+      <span className="shrink-0">{step.icon}</span>
+      <span className="whitespace-nowrap">{step.title}</span>
+      {locked ? <Lock className="h-3 w-3 shrink-0" /> : null}
+    </button>
+  );
+}
+
+function MobileMoreSheet({ open, activeKey, onClose, onSelect, role, stepStates = {} }) {
+  if (!open) return null;
+
+  const visibleInBottomNav = new Set(MOBILE_PRIMARY_STEP_KEYS);
+  const allSteps = [...STEPS, ...ADMIN_STEPS].filter((step) => !visibleInBottomNav.has(step.key));
 
   function handleSelect(step) {
     const adminLocked = isAdminMenuKey(step.key) && role !== "admin";
@@ -497,92 +630,197 @@ function MobileBottomNav({ activeKey, onSelect, role, stepStates = {} }) {
       return;
     }
     onSelect(step.key);
+    onClose();
   }
 
   return (
-    <div className="md:hidden fixed bottom-0 inset-x-0 z-40 border-t border-slate-200 bg-white/95 backdrop-blur">
-      <div className="overflow-x-auto">
-        <div className="flex min-w-max items-stretch gap-1 px-2 py-2">
-          {workflowSteps.map((s) => {
-            const active = s.key === activeKey;
-            const adminLocked = isAdminMenuKey(s.key) && role !== "admin";
-            const workflowLocked = Boolean(stepStates[s.key]?.workflowLocked);
+    <div className="fixed inset-0 z-50 md:hidden">
+      <button
+        type="button"
+        aria-label="메뉴 닫기"
+        className="absolute inset-0 bg-slate-950/35"
+        onClick={onClose}
+      />
+      <div className="absolute inset-x-0 bottom-0 rounded-t-[16px] border border-slate-200 bg-white p-2 shadow-2xl">
+        <div className="mb-2 flex items-center justify-between">
+          <div>
+            <div className="text-[16px] font-extrabold text-slate-950">전체 메뉴</div>
+            <div className="mt-0.5 text-[11px] font-semibold text-slate-500">필요한 단계로 바로 이동합니다.</div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-full border border-slate-200 px-2.5 py-1.5 text-[11px] font-bold text-slate-700"
+          >
+            닫기
+          </button>
+        </div>
+        <div className="grid max-h-[62vh] grid-cols-4 gap-1.5 overflow-y-auto pb-2">
+          {allSteps.map((step) => {
+            const active = step.key === activeKey;
+            const adminLocked = isAdminMenuKey(step.key) && role !== "admin";
+            const workflowLocked = Boolean(stepStates[step.key]?.workflowLocked);
             const locked = adminLocked || workflowLocked;
+
             return (
-              <button
-                key={s.key}
-                type="button"
-                onClick={() => handleSelect(s)}
-                className={[
-                  "relative h-14 min-w-[72px] rounded-lg border px-2 flex flex-col items-center justify-center gap-0.5 overflow-hidden",
-                  locked
-                    ? active
-                      ? "bg-rose-100 text-rose-700 border-rose-300 border-dashed"
-                      : "bg-white text-rose-700 border-rose-300 border-dashed"
-                    : active
-                      ? "bg-emerald-100 text-slate-900 border-emerald-300"
-                      : "bg-white text-slate-700 border-slate-200",
-                ].join(" ")}
-                title={locked ? `${s.sidebarTitle ?? s.title} (${adminLocked ? "관리자 전용" : "단계 잠금"})` : s.sidebarTitle ?? s.title}
-              >
-                <span
-                  className={[
-                    "absolute inset-x-0 top-0 h-1",
-                    locked ? "bg-rose-500" : active ? "bg-emerald-500" : "bg-transparent",
-                  ].join(" ")}
-                />
-                <span className={locked ? "text-rose-700" : active ? "text-emerald-700" : "text-slate-500"}>{s.icon}</span>
-                <span className="text-[11px] font-semibold leading-none flex items-center gap-0.5">
-                  <span>{s.sidebarTitle ?? s.title}</span>
-                  {locked ? <Lock className="w-3 h-3" /> : null}
-                </span>
-              </button>
-            );
-          })}
-          <div className="mx-1 w-px self-stretch bg-slate-200" />
-          {groupedSteps.map((s) => {
-            const active = s.key === activeKey;
-            const adminLocked = isAdminMenuKey(s.key) && role !== "admin";
-            const workflowLocked = Boolean(stepStates[s.key]?.workflowLocked);
-            const locked = adminLocked || workflowLocked;
-            const isReportLead = s.key === "approve";
-            return (
-              <button
-                key={s.key}
-                type="button"
-                onClick={() => handleSelect(s)}
-                className={[
-                  "relative h-14 min-w-[72px] rounded-lg border px-2 flex flex-col items-center justify-center gap-0.5 overflow-hidden",
-                  isReportLead
-                    ? active
-                      ? "bg-slate-100 text-slate-900 border-slate-300"
-                      : "bg-slate-50 text-slate-900 border-slate-200"
-                    : locked
-                    ? active
-                      ? "bg-rose-100 text-rose-700 border-rose-300 border-dashed"
-                      : "bg-white text-rose-700 border-rose-300 border-dashed"
-                    : active
-                      ? "bg-emerald-100 text-slate-900 border-emerald-300"
-                      : "bg-white text-slate-700 border-slate-200",
-                ].join(" ")}
-                title={locked ? `${s.sidebarTitle ?? s.title} (${adminLocked ? "관리자 전용" : "단계 잠금"})` : s.sidebarTitle ?? s.title}
-              >
-                <span
-                  className={[
-                    "absolute inset-x-0 top-0 h-1",
-                    isReportLead ? "bg-slate-400" : locked ? "bg-rose-500" : active ? "bg-emerald-500" : "bg-transparent",
-                  ].join(" ")}
-                />
-                <span className={isReportLead ? "text-slate-700" : locked ? "text-rose-700" : active ? "text-emerald-700" : "text-slate-500"}>{s.icon}</span>
-                <span className="text-[11px] font-semibold leading-none flex items-center gap-0.5">
-                  <span>{s.sidebarTitle ?? s.title}</span>
-                  {!isReportLead && locked ? <Lock className="w-3 h-3" /> : null}
-                </span>
-              </button>
+              <MobileStepButton
+                key={step.key}
+                step={step}
+                active={active}
+                locked={locked}
+                compact
+                onClick={() => handleSelect(step)}
+              />
             );
           })}
         </div>
       </div>
+    </div>
+  );
+}
+
+function MobilePrimaryNav({ activeKey, onSelect, onOpenMore, role, stepStates = {} }) {
+  const primarySteps = STEPS.filter((step) => MOBILE_PRIMARY_STEP_KEYS.includes(step.key));
+  const isMoreActive = !MOBILE_PRIMARY_STEP_KEYS.includes(activeKey);
+
+  function handleSelect(step) {
+    const workflowLocked = Boolean(stepStates[step.key]?.workflowLocked);
+    if (workflowLocked) {
+      alert("이전 단계를 완료해야 접근할 수 있습니다.");
+      return;
+    }
+    onSelect(step.key);
+  }
+
+  return (
+    <div className="fixed bottom-0 inset-x-0 z-40 border-t border-slate-200 bg-white/95 backdrop-blur md:hidden">
+      <div className="overflow-x-auto">
+        <div className="grid w-full grid-cols-5 gap-1 px-2 py-2">
+          {primarySteps.map((step) => {
+            const active = step.key === activeKey;
+            const workflowLocked = Boolean(stepStates[step.key]?.workflowLocked);
+            const locked = workflowLocked;
+
+            return (
+              <MobileStepButton
+                key={step.key}
+                step={step}
+                active={active}
+                locked={locked}
+                compact
+                onClick={() => handleSelect(step)}
+              />
+            );
+          })}
+          <button
+            type="button"
+            onClick={onOpenMore}
+            className={[
+              "relative flex h-14 w-full min-w-0 flex-col items-center justify-center gap-0.5 overflow-hidden rounded-lg border px-1 text-[10px] font-bold transition-colors",
+              isMoreActive
+                ? "border-slate-950 bg-slate-950 text-white"
+                : "border-slate-200 bg-slate-50 text-slate-700",
+            ].join(" ")}
+          >
+            <span className={["absolute inset-x-0 top-0 h-1", isMoreActive ? "bg-slate-400" : "bg-transparent"].join(" ")} />
+            <span className="text-[16px] leading-none">•••</span>
+            <span>더보기</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MobileAppShell({
+  activeMeta,
+  activeKey,
+  onSelect,
+  role,
+  stepStates,
+  session,
+  remainMin,
+  sessionTimeoutMinutes,
+  onLogin,
+  onLogout,
+  onExtendSession,
+  children,
+}) {
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  return (
+    <div className="min-h-screen bg-slate-50 md:hidden">
+      <header className="sticky top-0 z-40 border-b border-slate-200 bg-slate-50/95 px-3 pt-3 backdrop-blur">
+        <div className="flex items-center justify-between gap-2">
+          <div className="min-w-0">
+            <div className="text-[11px] font-bold tracking-[0.08em] text-slate-500">위험평가 관리 시스템</div>
+            <div className="mt-0.5 truncate text-[14px] font-extrabold tracking-[-0.03em] text-slate-950">
+              {activeMeta?.title || "대시보드"}
+            </div>
+          </div>
+
+          <div className="flex shrink-0 items-center gap-1.5">
+            {!session ? (
+              <span className="inline-flex h-8 items-center rounded-full border border-slate-200 bg-white px-2.5 text-[10px] font-bold leading-none text-slate-600">
+                게스트 모드
+              </span>
+            ) : null}
+            <Button
+              variant="primary"
+              onClick={session ? onLogout : onLogin}
+              className="h-8 shrink-0 rounded-full bg-black px-2.5 text-[10px] leading-none text-white"
+            >
+              {session ? "로그아웃" : "로그인"}
+            </Button>
+          </div>
+        </div>
+
+        {session ? (
+          <div className="mt-3 flex items-center justify-between gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2">
+            <div className="min-w-0">
+              <div className="truncate text-[11px] font-bold text-slate-900">
+                {session.user?.email}
+              </div>
+              <div className="mt-0.5 text-[10px] font-semibold text-slate-500">
+                {role} · 세션 {Math.min(sessionTimeoutMinutes, remainMin)}분
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={onExtendSession}
+              className="shrink-0 rounded-full border border-amber-300 bg-amber-100 px-2.5 py-1.5 text-[10px] font-bold text-amber-800"
+            >
+              연장
+            </button>
+          </div>
+        ) : null}
+
+        {activeMeta?.desc ? (
+          <p className="mt-2 line-clamp-2 text-[11px] leading-relaxed text-slate-600">{activeMeta.desc}</p>
+        ) : null}
+
+      </header>
+
+      <main className="px-3 py-3 pb-24">
+        {children}
+      </main>
+
+      <MobilePrimaryNav
+        activeKey={activeKey}
+        onSelect={onSelect}
+        onOpenMore={() => setMenuOpen(true)}
+        role={role}
+        stepStates={stepStates}
+      />
+      <MobileMoreSheet
+        open={menuOpen}
+        activeKey={activeKey}
+        onClose={() => setMenuOpen(false)}
+        onSelect={onSelect}
+        role={role}
+        stepStates={stepStates}
+      />
     </div>
   );
 }
@@ -598,6 +836,7 @@ function AdminBlockedPanel() {
 
 export default function App({ embeddedContext } = {}) {
   const isPortalEmbedded = getPortalEmbeddedState(embeddedContext);
+  const isMobileViewport = useIsMobileViewport();
   const [session, setSession] = useState(
     isPortalEmbedded
       ? {
@@ -627,36 +866,40 @@ export default function App({ embeddedContext } = {}) {
     return checklistItems.filter((row) => normalizeChecklistType(row?.type) === checklistStandard);
   }, [checklistItems, checklistStandard]);
 
-  const totalChecklistCount = visibleChecklistItems.length;
+  const isGuestMode = !isPortalEmbedded && !session;
+  const guestDemoChecklistItems = useMemo(() => buildGuestDemoChecklistItems(), []);
+  const displayChecklistItems = isGuestMode ? guestDemoChecklistItems : visibleChecklistItems;
+
+  const totalChecklistCount = displayChecklistItems.length;
   const statusDoneCount = useMemo(
     () =>
-      visibleChecklistItems.filter((x) => safeStr(x?.status ?? x?.current_status ?? x?.state).trim() !== "")
+      displayChecklistItems.filter((x) => safeStr(x?.status ?? x?.current_status ?? x?.state).trim() !== "")
         .length,
-    [visibleChecklistItems]
+    [displayChecklistItems]
   );
   const vulnDoneCount = useMemo(
     () =>
-      visibleChecklistItems.filter((x) => {
+      displayChecklistItems.filter((x) => {
         const resultText = safeStr(x?.result ?? x?.vulnResult).trim();
         return resultText === "양호" || resultText === "취약";
       }).length,
-    [visibleChecklistItems]
+    [displayChecklistItems]
   );
   const riskDoneCount = useMemo(
     () =>
-      visibleChecklistItems.filter((x) => safeStr(x?.likelihood).trim() !== "" && safeStr(x?.impact).trim() !== "")
+      displayChecklistItems.filter((x) => safeStr(x?.likelihood).trim() !== "" && safeStr(x?.impact).trim() !== "")
         .length,
-    [visibleChecklistItems]
+    [displayChecklistItems]
   );
   const treatmentDoneCount = useMemo(
     () =>
-      visibleChecklistItems.filter((x) => {
+      displayChecklistItems.filter((x) => {
         const strategy = safeStr(x?.strategy).trim();
         const mitigation = safeStr(x?.mitigation).trim();
         const acceptance = safeStr(x?.acceptance_reason).trim();
         return strategy !== "" || mitigation !== "" || acceptance !== "";
       }).length,
-    [visibleChecklistItems]
+    [displayChecklistItems]
   );
 
   const stepStates = useMemo(
@@ -1157,6 +1400,31 @@ export default function App({ embeddedContext } = {}) {
     await forceLocalLogout();
   }
 
+  async function handleLogin() {
+    try {
+      setAuthLoading(true);
+      clearStoredLoginAt();
+      const { error } = await firebaseBackend.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: window.location.origin,
+          queryParams: {
+            access_type: "offline",
+            prompt: "consent",
+          },
+        },
+      });
+
+      if (error) {
+        throw error;
+      }
+    } catch (e) {
+      console.error("Google login error:", e);
+      alert(e.message || "Google 로그인에 실패했습니다.");
+      setAuthLoading(false);
+    }
+  }
+
   if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center text-slate-600">
@@ -1165,11 +1433,7 @@ export default function App({ embeddedContext } = {}) {
     );
   }
 
-  if (!session) {
-    return <LoginPage />;
-  }
-
-  const effectiveExpiry = computeEffectiveExpiry(session, sessionTimeoutMinutes);
+  const effectiveExpiry = session ? computeEffectiveExpiry(session, sessionTimeoutMinutes) : null;
   const remainMs = effectiveExpiry ? Math.max(0, effectiveExpiry - clockNow) : 0;
   // Cap at the configured timeout: loginAt can sit a fraction ahead of clockNow
   // right after login, which would otherwise round 60min up to 61 via ceil.
@@ -1183,51 +1447,179 @@ export default function App({ embeddedContext } = {}) {
 
   const topRight = (
     <>
-      <div className={`hidden md:flex items-center justify-between gap-2 ${topInfoCardClass}`}>
-        <div className="min-w-0">
-          <div className="text-sm font-semibold text-slate-900 truncate leading-tight">{session.user.email}</div>
+      {session ? (
+        <div className={`hidden md:flex items-center justify-between gap-2 ${topInfoCardClass}`}>
+          <div className="min-w-0">
+            <div className="text-sm font-semibold text-slate-900 truncate leading-tight">{session.user.email}</div>
+          </div>
+          <div
+            className={[
+              "shrink-0 px-2 py-0.5 rounded-xl text-xs font-semibold border",
+              role === "admin"
+                ? "bg-amber-50 text-amber-700 border-amber-200"
+                : "bg-slate-50 text-slate-600 border-slate-200",
+            ].join(" ")}
+          >
+            {role}
+          </div>
         </div>
+      ) : (
         <div
-          className={[
-            "shrink-0 px-2 py-0.5 rounded-xl text-xs font-semibold border",
-            role === "admin"
-              ? "bg-amber-50 text-amber-700 border-amber-200"
-              : "bg-slate-50 text-slate-600 border-slate-200",
-          ].join(" ")}
+          className={`hidden md:flex items-center justify-center ${topInfoCardClass} text-sm font-semibold text-slate-500`}
         >
-          {role}
+          게스트 모드
         </div>
-      </div>
+      )}
 
-      <div className="hidden xl:flex items-center rounded-xl border border-slate-200 bg-white px-3 py-2 h-8 w-fit">
-        <div className="text-sm text-slate-900 whitespace-nowrap">
-          세션 만료:{" "}
-          <span className={["font-bold", remainMin <= 10 ? "text-rose-600" : "text-slate-900"].join(" ")}>
-            {remainMin}분
-          </span>
+      {session ? (
+        <div className="hidden xl:flex items-center rounded-xl border border-slate-200 bg-white px-3 py-2 h-8 w-fit">
+          <div className="text-sm text-slate-900 whitespace-nowrap">
+            세션 만료:{" "}
+            <span className={["font-bold", remainMin <= 10 ? "text-rose-600" : "text-slate-900"].join(" ")}>
+              {remainMin}분
+            </span>
+          </div>
         </div>
-      </div>
+      ) : null}
 
-      <Button
-        variant="outline"
-        onClick={handleExtendSession}
-        className="h-8 rounded-xl px-3 text-sm !bg-amber-500 !text-slate-900 !border-amber-500 hover:!bg-amber-500 hover:!border-amber-500"
-      >
-        세션 연장
-      </Button>
+      {session ? (
+        <Button
+          variant="outline"
+          onClick={handleExtendSession}
+          className="h-8 rounded-xl px-3 text-sm !bg-amber-500 !text-slate-900 !border-amber-500 hover:!bg-amber-500 hover:!border-amber-500"
+        >
+          세션 연장
+        </Button>
+      ) : null}
 
       <Button
         variant="primary"
-        onClick={handleLogout}
+        onClick={session ? handleLogout : handleLogin}
         className="h-8 rounded-xl px-3 text-sm bg-black text-white border-black hover:bg-slate-900 hover:border-slate-900"
       >
-        로그아웃
+        {session ? "로그아웃" : "Google 로그인"}
       </Button>
     </>
   );
 
   const isAdminMenu = isAdminMenuKey(activeStep);
   const isAdminUser = role === "admin";
+
+  const activeContent = (
+    <>
+      {activeStep === "dashboard" && <DashboardPanel checklistItems={displayChecklistItems} />}
+
+      {activeStep === "checklist" && (
+        <ChecklistPanel
+          checklistItems={visibleChecklistItems}
+          setChecklistItems={setChecklistItems}
+          onReload={() => {
+            localStorage.removeItem("checklist_cache_v1");
+            setChecklistReloadKey((k) => k + 1);
+          }}
+        />
+      )}
+
+      {activeStep === "status" && (
+        <StatusWritePanel
+          checklistItems={displayChecklistItems}
+          onUpdated={applyChecklistUpdate}
+        />
+      )}
+
+      {activeStep === "vuln" && (
+        <VulnIdentifyPanel
+          checklistItems={displayChecklistItems}
+          onUpdated={applyChecklistUpdate}
+        />
+      )}
+
+      {activeStep === "risk_evaluate" && (
+        <RiskEvaluatePanel
+          checklistItems={displayChecklistItems}
+          onUpdated={applyChecklistUpdate}
+        />
+      )}
+
+      {activeStep === "risk_treatment" && (
+        <RiskTreatmentPanel
+          checklistItems={displayChecklistItems}
+          checklistStandard={checklistStandard}
+          onUpdated={applyChecklistUpdate}
+        />
+      )}
+
+      {activeStep === "residual" && (
+        <ResidualRiskPanel
+          checklistItems={displayChecklistItems}
+          onUpdated={applyChecklistUpdate}
+        />
+      )}
+
+      {activeStep === "approve" && (
+        <ApprovePanel
+          checklistItems={displayChecklistItems}
+          onApproveAll={approveAll}
+        />
+      )}
+
+      {activeStep === "admin_security" && (
+        isAdminUser ? (
+          <AdminSecurityPanel
+            session={session}
+            reloadKey={adminReloadKey}
+            onChanged={() => setAdminReloadKey((k) => k + 1)}
+            canManage={isAdminUser}
+          />
+        ) : (
+          <AdminBlockedPanel />
+        )
+      )}
+
+      {activeStep === "admin_logs" && (
+        isAdminUser ? (
+          <AdminAuditLogsPanel reloadKey={adminReloadKey} />
+        ) : (
+          <AdminBlockedPanel />
+        )
+      )}
+
+      {activeStep === "admin_access" && (
+        isAdminUser ? (
+          <AdminAccessPanel
+            session={session}
+            reloadKey={adminReloadKey}
+            onChanged={() => setAdminReloadKey((k) => k + 1)}
+            canManage={isAdminUser}
+          />
+        ) : (
+          <AdminBlockedPanel />
+        )
+      )}
+
+      {isAdminMenu && !activeMeta && <AdminBlockedPanel />}
+    </>
+  );
+
+  if (isMobileViewport) {
+    return (
+      <MobileAppShell
+        activeMeta={activeMeta}
+        activeKey={activeStep}
+        onSelect={setActiveStep}
+        role={role}
+        stepStates={stepStates}
+        session={session}
+        remainMin={remainMin}
+        sessionTimeoutMinutes={sessionTimeoutMinutes}
+        onLogin={handleLogin}
+        onLogout={handleLogout}
+        onExtendSession={handleExtendSession}
+      >
+        {activeContent}
+      </MobileAppShell>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -1250,102 +1642,11 @@ export default function App({ embeddedContext } = {}) {
             />
 
             <div className="pt-1.5 md:pt-3 pb-24 md:pb-10">
-              {activeStep === "dashboard" && <DashboardPanel checklistItems={visibleChecklistItems} />}
-
-              {activeStep === "checklist" && (
-                <ChecklistPanel
-                  checklistItems={visibleChecklistItems}
-                  setChecklistItems={setChecklistItems}
-                  onReload={() => {
-                    localStorage.removeItem("checklist_cache_v1");
-                    setChecklistReloadKey((k) => k + 1);
-                  }}
-                />
-              )}
-
-              {activeStep === "status" && (
-                <StatusWritePanel
-                  checklistItems={visibleChecklistItems}
-                  onUpdated={applyChecklistUpdate}
-                />
-              )}
-
-              {activeStep === "vuln" && (
-                <VulnIdentifyPanel
-                  checklistItems={visibleChecklistItems}
-                  onUpdated={applyChecklistUpdate}
-                />
-              )}
-
-              {activeStep === "risk_evaluate" && (
-                <RiskEvaluatePanel
-                  checklistItems={visibleChecklistItems}
-                  onUpdated={applyChecklistUpdate}
-                />
-              )}
-
-              {activeStep === "risk_treatment" && (
-                <RiskTreatmentPanel
-                  checklistItems={visibleChecklistItems}
-                  checklistStandard={checklistStandard}
-                  onUpdated={applyChecklistUpdate}
-                />
-              )}
-
-              {activeStep === "residual" && (
-                <ResidualRiskPanel
-                  checklistItems={visibleChecklistItems}
-                  onUpdated={applyChecklistUpdate}
-                />
-              )}
-
-              {activeStep === "approve" && (
-                <ApprovePanel
-                  checklistItems={visibleChecklistItems}
-                  onApproveAll={approveAll}
-                />
-              )}
-
-              {activeStep === "admin_security" && (
-                isAdminUser ? (
-                  <AdminSecurityPanel
-                    session={session}
-                    reloadKey={adminReloadKey}
-                    onChanged={() => setAdminReloadKey((k) => k + 1)}
-                    canManage={isAdminUser}
-                  />
-                ) : (
-                  <AdminBlockedPanel />
-                )
-              )}
-
-              {activeStep === "admin_logs" && (
-                isAdminUser ? (
-                  <AdminAuditLogsPanel reloadKey={adminReloadKey} />
-                ) : (
-                  <AdminBlockedPanel />
-                )
-              )}
-
-              {activeStep === "admin_access" && (
-                isAdminUser ? (
-                  <AdminAccessPanel
-                    session={session}
-                    reloadKey={adminReloadKey}
-                    onChanged={() => setAdminReloadKey((k) => k + 1)}
-                    canManage={isAdminUser}
-                  />
-                ) : (
-                  <AdminBlockedPanel />
-                )
-              )}
-
-              {isAdminMenu && !activeMeta && <AdminBlockedPanel />}
+              {activeContent}
             </div>
           </div>
         </div>
       </div>
-      <MobileBottomNav activeKey={activeStep} onSelect={setActiveStep} role={role} stepStates={stepStates} />
     </div>
   );
 }

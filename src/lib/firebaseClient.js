@@ -1,10 +1,11 @@
 import { initializeApp } from "firebase/app";
 import { getAnalytics, isSupported as isAnalyticsSupported } from "firebase/analytics";
 import {
+  browserLocalPersistence,
   getAuth,
-  getRedirectResult,
   GoogleAuthProvider,
   onAuthStateChanged,
+  setPersistence,
   signInWithPopup,
   signOut as firebaseSignOut,
 } from "firebase/auth";
@@ -33,6 +34,9 @@ const firebaseConfig = {
 export const firebaseApp = initializeApp(firebaseConfig);
 export const firebaseAuth = getAuth(firebaseApp);
 export const firestore = getFirestore(firebaseApp);
+const authPersistenceReady = setPersistence(firebaseAuth, browserLocalPersistence).catch((error) => {
+  console.error("Firebase auth persistence setup failed:", error);
+});
 
 if (typeof window !== "undefined" && firebaseConfig.measurementId) {
   isAnalyticsSupported()
@@ -437,6 +441,7 @@ export const firebaseBackend = {
       }
 
       try {
+        await authPersistenceReady;
         const googleProvider = new GoogleAuthProvider();
         googleProvider.setCustomParameters({
           prompt: "select_account",
@@ -445,15 +450,6 @@ export const firebaseBackend = {
         return { data: { url: null, session: await makeSession(result.user) }, error: null };
       } catch (error) {
         return { data: null, error };
-      }
-    },
-
-    async exchangeCodeForSession() {
-      try {
-        const result = await getRedirectResult(firebaseAuth);
-        return { data: { session: await makeSession(result?.user ?? firebaseAuth.currentUser) }, error: null };
-      } catch (error) {
-        return { data: { session: await makeSession(firebaseAuth.currentUser) }, error };
       }
     },
 

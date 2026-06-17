@@ -7,6 +7,11 @@ service cloud.firestore {
         && request.auth.token.email == "totoriverce@gmail.com";
     }
 
+    match /checklist/{document=**} {
+      allow read: if true;
+      allow write: if isAllowedUser();
+    }
+
     match /{document=**} {
       allow read, write: if isAllowedUser();
     }

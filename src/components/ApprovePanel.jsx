@@ -715,14 +715,17 @@ export default function ApprovePanel({
 
               <div className="mt-1 text-xs text-slate-500">취약 항목 기준 도메인별 건수</div>
 
-              <div className="mt-3 flex flex-wrap gap-2">
+              <div className="mt-2 flex flex-wrap gap-1.5 md:mt-3 md:gap-2">
                 {vulnerableDomains.length ? (
                   vulnerableDomains.slice(0, 20).map(([d, c]) => (
                     <span
                       key={`main-vuln-domain-${d}`}
-                      className="px-3 py-1 rounded-full border text-xs font-semibold bg-white text-slate-700 border-slate-200"
+                      className="inline-flex items-center overflow-hidden rounded-lg border border-rose-100 bg-gradient-to-r from-rose-50 to-white text-[9px] font-bold leading-none text-slate-800 shadow-[0_1px_2px_rgba(15,23,42,0.05)] md:rounded-xl md:text-xs"
                     >
-                      {d} <span className="text-slate-500">{c}</span>
+                      <span className="max-w-[118px] truncate px-2 py-1 md:max-w-[180px] md:px-2.5 md:py-1.5">{d}</span>
+                      <span className="self-stretch border-l border-rose-100 bg-rose-100/70 px-1.5 py-1 text-rose-700 md:px-2 md:py-1.5">
+                        {c}
+                      </span>
                     </span>
                   ))
                 ) : (

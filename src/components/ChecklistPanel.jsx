@@ -411,8 +411,8 @@ export default function ChecklistPanel({
             total={progressRows.length}
           />
 
-          <div className="panel-filter-card rounded-lg border border-slate-200 bg-white p-3">
-            <div className="flex items-center gap-2 flex-wrap">
+          <div className="panel-filter-card rounded-lg border border-slate-200 bg-white p-2 md:p-3">
+            <div className="grid grid-cols-[0.8fr_1fr_1.05fr_1.2fr] items-center gap-1.5 md:flex md:flex-wrap md:gap-2">
               <select
                 value={typeFilter}
                 onChange={(e) => {
@@ -420,7 +420,7 @@ export default function ChecklistPanel({
                   setAreaFilter("전체");
                   setDomainFilter("전체");
                 }}
-                className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
+                className="min-w-0 rounded-md border border-slate-200 bg-white px-1 py-1 text-[10px] outline-none focus:ring-2 focus:ring-slate-200 md:px-3 md:py-2 md:text-sm"
               >
                 {typeOptions.map((t) => (
                   <option key={t} value={t}>
@@ -435,7 +435,7 @@ export default function ChecklistPanel({
                   setAreaFilter(e.target.value);
                   setDomainFilter("전체");
                 }}
-                className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
+                className="min-w-0 rounded-md border border-slate-200 bg-white px-1 py-1 text-[10px] outline-none focus:ring-2 focus:ring-slate-200 md:px-3 md:py-2 md:text-sm"
               >
                 {areaOptions.map((a) => (
                   <option key={a} value={a}>
@@ -447,7 +447,7 @@ export default function ChecklistPanel({
               <select
                 value={domainFilter}
                 onChange={(e) => setDomainFilter(e.target.value)}
-                className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
+                className="min-w-0 rounded-md border border-slate-200 bg-white px-1 py-1 text-[10px] outline-none focus:ring-2 focus:ring-slate-200 md:px-3 md:py-2 md:text-sm"
               >
                 {domainOptions.map((d) => (
                   <option key={d} value={d}>
@@ -459,11 +459,11 @@ export default function ChecklistPanel({
               <input
                 value={keyword}
                 onChange={(e) => setKeyword(e.target.value)}
-                className="min-w-[220px] flex-1 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
+                className="min-w-0 rounded-md border border-slate-200 bg-white px-1 py-1 text-[10px] outline-none placeholder:text-[10px] focus:ring-2 focus:ring-slate-200 md:min-w-[220px] md:flex-1 md:px-3 md:py-2 md:text-sm"
                 placeholder="검색(코드/항목/가이드/현황/도메인/영역 등)"
               />
 
-              <div className="text-xs text-slate-600 ml-auto">
+              <div className="col-span-4 text-[10px] text-slate-600 md:col-span-1 md:ml-auto md:text-xs">
                 표시 {filteredRows.length}건 · {pageSafe}/{totalPages} 페이지
               </div>
             </div>
@@ -493,13 +493,20 @@ export default function ChecklistPanel({
 
       <div className="flex-1 min-h-0 overflow-y-auto pr-1 pb-6 space-y-3">
         <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
-          <table className="w-full table-auto">
+          <table className="w-full table-fixed">
+            <colgroup>
+              <col className="w-[12%] md:w-[10%]" />
+              <col className="w-[18%] md:w-[18%]" />
+              <col className="w-[19%] md:w-[18%]" />
+              <col className="w-[12%] md:w-[12%]" />
+              <col className="w-[39%] md:w-[42%]" />
+            </colgroup>
             <thead className="bg-slate-50 sticky top-0 z-[1]">
               <tr>
                 {cols.map((c) => (
                   <th
                     key={c.key}
-                    className="px-3 py-3 text-xs font-bold text-black border-b border-slate-200 text-center"
+                    className="px-1 py-2 text-[10px] font-bold text-black border-b border-slate-200 text-center md:px-3 md:py-3 md:text-xs"
                     style={{ whiteSpace: "nowrap" }}
                   >
                     {c.label}
@@ -523,7 +530,7 @@ export default function ChecklistPanel({
                       <td
                         key={c.key}
                         className={[
-                          "px-3 py-3 text-sm text-slate-800 align-top",
+                          "px-1 py-2 text-[10px] leading-[1.25] text-slate-800 align-top md:px-3 md:py-3 md:text-sm md:leading-normal",
                           isCentered ? "text-center" : "text-left",
                         ].join(" ")}
                         style={{ whiteSpace: isItem ? "pre-wrap" : "nowrap" }}

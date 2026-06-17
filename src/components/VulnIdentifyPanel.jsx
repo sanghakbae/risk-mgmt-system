@@ -199,7 +199,7 @@ function RowCard({ row, isSaving, onSave, editable, blockMessage }) {
                 editable ? "취약 판단 근거를 입력하세요" : "Status 전체 완료 후 입력 가능합니다."
               }
               className={[
-                "w-full max-w-[720px] min-h-[140px] rounded-xl px-3 py-2 text-sm outline-none",
+                "w-full max-w-[720px] min-h-[70px] rounded-xl px-2 py-1 text-[10px] outline-none md:min-h-[140px] md:px-3 md:py-2 md:text-sm",
                 editable
                   ? "border border-rose-300 bg-rose-100 text-rose-800 focus:ring-2 focus:ring-rose-200"
                   : "border border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed",
@@ -221,7 +221,7 @@ function RowCard({ row, isSaving, onSave, editable, blockMessage }) {
             onChange={(e) => setResult(e.target.value)}
             disabled={!editable || isSaving}
             className={[
-              "rounded-xl border px-3 py-2 text-sm outline-none",
+              "rounded-xl border px-2 py-1 text-[10px] outline-none md:px-3 md:py-2 md:text-sm",
               editable
                 ? "border-slate-200 bg-white focus:ring-2 focus:ring-slate-200"
                 : "border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed",
@@ -431,8 +431,8 @@ export default function VulnIdentifyPanel({ checklistItems = [], onUpdated }) {
           <TopProgressBar title="취약 식별 진행률" done={vulnDoneCount} total={totalCount} />
         </div>
 
-        <div className="panel-filter-card rounded-2xl border border-slate-200 bg-white p-4">
-          <div className="flex items-center gap-2 flex-wrap">
+        <div className="panel-filter-card rounded-2xl border border-slate-200 bg-white p-2 md:p-4">
+          <div className="grid grid-cols-[0.75fr_0.95fr_1fr_0.9fr_1.25fr] items-center gap-1 md:flex md:flex-wrap md:gap-2">
             <select
               value={typeFilter}
               onChange={(e) => {
@@ -440,7 +440,7 @@ export default function VulnIdentifyPanel({ checklistItems = [], onUpdated }) {
                 setAreaFilter(AREA_ALL);
                 setDomainFilter(DOMAIN_ALL);
               }}
-              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
+              className="min-w-0 rounded-lg border border-slate-200 bg-white px-1 py-1 text-[9px] outline-none focus:ring-2 focus:ring-slate-200 md:rounded-xl md:px-3 md:py-2 md:text-sm"
             >
               {typeOptions.map((t) => (
                 <option key={t} value={t}>
@@ -455,7 +455,7 @@ export default function VulnIdentifyPanel({ checklistItems = [], onUpdated }) {
                 setAreaFilter(e.target.value);
                 setDomainFilter(DOMAIN_ALL);
               }}
-              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
+              className="min-w-0 rounded-lg border border-slate-200 bg-white px-1 py-1 text-[9px] outline-none focus:ring-2 focus:ring-slate-200 md:rounded-xl md:px-3 md:py-2 md:text-sm"
             >
               {areaOptions.map((a) => (
                 <option key={a || "__all_area__"} value={a}>
@@ -467,7 +467,7 @@ export default function VulnIdentifyPanel({ checklistItems = [], onUpdated }) {
             <select
               value={domainFilter}
               onChange={(e) => setDomainFilter(e.target.value)}
-              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
+              className="min-w-0 rounded-lg border border-slate-200 bg-white px-1 py-1 text-[9px] outline-none focus:ring-2 focus:ring-slate-200 md:rounded-xl md:px-3 md:py-2 md:text-sm"
             >
               {domainOptions.map((d) => (
                 <option key={d || "__all_domain__"} value={d}>
@@ -479,7 +479,7 @@ export default function VulnIdentifyPanel({ checklistItems = [], onUpdated }) {
             <select
               value={resultFilter}
               onChange={(e) => setResultFilter(e.target.value)}
-              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
+              className="min-w-0 rounded-lg border border-slate-200 bg-white px-1 py-1 text-[9px] outline-none focus:ring-2 focus:ring-slate-200 md:rounded-xl md:px-3 md:py-2 md:text-sm"
             >
               <option value="전체">결과(전체)</option>
               <option value="취약">취약</option>
@@ -490,11 +490,11 @@ export default function VulnIdentifyPanel({ checklistItems = [], onUpdated }) {
             <input
               value={keyword}
               onChange={(e) => setKeyword(e.target.value)}
-              className="min-w-[220px] flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
+              className="min-w-0 rounded-lg border border-slate-200 bg-white px-1 py-1 text-[9px] outline-none placeholder:text-[9px] focus:ring-2 focus:ring-slate-200 md:min-w-[220px] md:flex-1 md:rounded-xl md:px-3 md:py-2 md:text-sm"
               placeholder="검색(코드/항목/가이드/현황/도메인/영역/증적)"
             />
 
-            <div className="text-sm text-slate-600 ml-auto">
+            <div className="col-span-5 text-[9px] text-slate-600 md:col-span-1 md:ml-auto md:text-sm">
               표시 {filteredRows.length}건 · {pageSafe}/{totalPages} 페이지
             </div>
           </div>
